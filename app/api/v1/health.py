@@ -33,7 +33,9 @@ async def health_check(db: SessionDep):
         checks["redis"] = f"error: {exc}"
 
     all_ok = all(v == "ok" for v in checks.values())
-    if not all_ok:
-        raise HTTPException(status_code=503, detail={"status": "degraded", "checks": checks})
+    status = "ok" if all_ok else "degraded"
 
-    return {"status": "ok", "checks": checks, "version": "1.0.0"}
+    if checks.get("database") != "ok":
+        raise HTTPException(status_code=503, detail={"status": status, "checks": checks})
+
+    return {"status": status, "checks": checks, "version": "1.0.0"}

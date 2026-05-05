@@ -11,9 +11,13 @@ from app.api.router import api_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
+    from app.db.session import engine, _is_sqlite
+    if _is_sqlite:
+        from app.db.base import Base
+        import app.models  # noqa: F401 — register all models
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
     yield
-    # Shutdown
 
 
 def create_app() -> FastAPI:

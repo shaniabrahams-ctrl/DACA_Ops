@@ -19,10 +19,10 @@ help:
 	@echo "make run        - Run API server locally (no Docker)"
 
 dev:
-	docker-compose up --build
+	docker compose up --build
 
 down:
-	docker-compose down
+	docker compose down
 
 test:
 	pytest tests/ -v --asyncio-mode=auto --cov=app --cov-report=term-missing
@@ -55,7 +55,7 @@ beat:
 	celery -A app.tasks.celery_app beat --loglevel=info
 
 shell:
-	docker exec -it $$(docker-compose ps -q api) /bin/bash
+	docker exec -it $$(docker compose ps -q api) /bin/bash
 
 logs:
-	docker-compose logs -f
+	docker compose logs -f

@@ -39,7 +39,7 @@ class EmailDraftOut(BaseModel):
     subject: str
     body_html: str
     body_text: str | None
-    send_method: str
+    send_method: str | None
     status: str
     reviewed_by: str | None
     reviewed_at: datetime | None
