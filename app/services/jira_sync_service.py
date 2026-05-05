@@ -72,8 +72,17 @@ async def search_jira_issues() -> list[dict[str, Any]]:
         logger.info("Jira API token not configured; skipping Jira search.")
         return []
 
-    jql = f"project = {settings.jira_project_key} ORDER BY created DESC"
-    fields = ["summary", "description", "status", "priority", "assignee", "created", "updated"]
+    # CSHELP uses issuetype "DACA Request"; extra projects (COMPLHELP) hold historical
+    # DACA records under mixed issue types so we filter those by text match.
+    extra = settings.jira_extra_project_list
+    clauses = [f'(project = {settings.jira_project_key} AND issuetype = "DACA Request")']
+    for proj in extra:
+        clauses.append(f'(project = {proj} AND text ~ "DACA")')
+    jql = "(" + " OR ".join(clauses) + ") ORDER BY created DESC"
+    fields = [
+        "summary", "description", "status", "priority", "assignee",
+        "reporter", "created", "updated", "issuetype", "project",
+    ]
     all_issues: list[dict[str, Any]] = []
     next_page_token: str | None = None
     max_results = 100
@@ -141,14 +150,22 @@ async def sync_from_jira() -> dict[str, int]:
             for row in result.all()
         }
 
-        # Determine next external_ref sequence number
+        # Determine next external_ref sequence number using MAX, not COUNT, so that
+        # gaps (e.g. seed data starting at 0035) don't cause UNIQUE collisions.
         year = datetime.now(timezone.utc).year
-        count_result = await session.execute(
-            select(func.count(DacaRequest.id)).where(
+        max_result = await session.execute(
+            select(func.max(DacaRequest.external_ref)).where(
                 DacaRequest.external_ref.like(f"DACA-{year}-%")
             )
         )
-        sequence = (count_result.scalar() or 0) + 1
+        max_ref = max_result.scalar()
+        if max_ref:
+            try:
+                sequence = int(max_ref.split("-")[-1]) + 1
+            except (ValueError, IndexError):
+                sequence = 1
+        else:
+            sequence = 1
 
         for issue in issues:
             ticket_key = issue.get("key", "")

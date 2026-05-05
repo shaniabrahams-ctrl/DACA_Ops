@@ -47,7 +47,12 @@ class Settings(BaseSettings):
     jira_base_url: str = "https://rho.atlassian.net"
     jira_api_token: str = ""
     jira_user_email: str = ""
-    jira_project_key: str = "CS"
+    jira_project_key: str = "CSHELP"          # primary: filtered by issuetype="DACA Request"
+    jira_extra_projects: str = "COMPLHELP"    # comma-separated; each queried with text ~ "DACA"
+
+    @property
+    def jira_extra_project_list(self) -> list[str]:
+        return [p.strip() for p in self.jira_extra_projects.split(",") if p.strip()]
 
     # DocuSign (Phase 2)
     docusign_integration_key: str = ""
