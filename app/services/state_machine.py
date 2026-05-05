@@ -203,6 +203,13 @@ async def transition(
         ip_address=ip_address,
     )
 
-    # 6. TODO Sprint 3: dispatch next agent task via Celery
+    # 6. Push status change to Jira (fire-and-forget)
+    if request.jira_ticket_key:
+        try:
+            from app.services.jira_sync_service import sync_status_to_jira
+            import asyncio
+            asyncio.create_task(sync_status_to_jira(request.jira_ticket_key, target_status))
+        except Exception:
+            pass  # non-blocking
 
     return request

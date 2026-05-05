@@ -1,7 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { oversight as oversightApi } from '../api/client';
 import type { OversightConfig } from '../types';
 import { DACA_STATUSES, ALWAYS_HUMAN_STAGES } from '../types';
+
+interface IntegrationInfo {
+  configured: boolean;
+  [key: string]: unknown;
+}
+
+interface IntegrationStatus {
+  jira: IntegrationInfo;
+  google: IntegrationInfo;
+  slack: IntegrationInfo;
+  zendesk: IntegrationInfo;
+}
 
 export default function Settings() {
   const [configs, setConfigs] = useState<OversightConfig[]>([]);
@@ -14,6 +26,35 @@ export default function Settings() {
     'HUMAN_OVERSIGHT',
   );
   const [systemThreshold, setSystemThreshold] = useState(0.85);
+
+  const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null);
+  const [syncing, setSyncing] = useState<string | null>(null);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+
+  const fetchIntegrations = useCallback(() => {
+    fetch('/api/v1/sync/status')
+      .then((r) => r.json())
+      .then(setIntegrations)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchIntegrations();
+  }, [fetchIntegrations]);
+
+  const triggerSync = async (source: string) => {
+    setSyncing(source);
+    setSyncResult(null);
+    try {
+      const res = await fetch(`/api/v1/sync/${source}`, { method: 'POST' });
+      const data = await res.json();
+      setSyncResult(`${source}: ${JSON.stringify(data.result ?? data)}`);
+    } catch (e) {
+      setSyncResult(`${source}: error — ${e instanceof Error ? e.message : 'failed'}`);
+    } finally {
+      setSyncing(null);
+    }
+  };
 
   const fetchConfigs = () => {
     setLoading(true);
@@ -218,46 +259,87 @@ export default function Settings() {
             </div>
           </section>
 
-          {/* Notification channels placeholder */}
+          {/* Integrations & Data Sync */}
           <section className="card">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Notification Channels
+              Integrations & Data Sync
             </h2>
-            <p className="text-sm text-gray-500">
-              Configure Slack, email, and webhook notification channels for pipeline
-              events. Integration settings are managed via environment variables.
+            <p className="mb-4 text-xs text-gray-500">
+              Real-time connection status for external systems. Add API keys to .env then
+              restart the server, or click Sync to pull data now.
             </p>
-            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="rounded-md border border-gray-200 p-4">
-                <h3 className="text-sm font-medium text-gray-900">Slack</h3>
-                <p className="mt-1 text-xs text-gray-500">
-                  Configured via SLACK_WEBHOOK_URL
-                </p>
-              </div>
-              <div className="rounded-md border border-gray-200 p-4">
-                <h3 className="text-sm font-medium text-gray-900">Email</h3>
-                <p className="mt-1 text-xs text-gray-500">
-                  Configured via GMAIL_CREDENTIALS
-                </p>
-              </div>
-              <div className="rounded-md border border-gray-200 p-4">
-                <h3 className="text-sm font-medium text-gray-900">Webhooks</h3>
-                <p className="mt-1 text-xs text-gray-500">
-                  Configured via WEBHOOK_URLS
-                </p>
-              </div>
-            </div>
-          </section>
 
-          {/* Auth config placeholder */}
-          <section className="card">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Authentication
-            </h2>
-            <p className="text-sm text-gray-500">
-              Authentication is handled via the X-Actor-Id header (MVP).
-              OAuth/SSO integration planned for a future sprint.
-            </p>
+            {syncResult && (
+              <div className="mb-4 rounded-md bg-blue-50 p-3 text-sm text-blue-800">
+                {syncResult}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {(
+                [
+                  { key: 'jira', label: 'Jira', envHint: 'JIRA_API_TOKEN + JIRA_USER_EMAIL' },
+                  { key: 'google', label: 'Google (Sheets/Gmail/Drive)', envHint: 'GOOGLE_SERVICE_ACCOUNT_JSON' },
+                  { key: 'slack', label: 'Slack', envHint: 'SLACK_BOT_TOKEN' },
+                  { key: 'zendesk', label: 'Zendesk', envHint: 'ZENDESK_API_TOKEN + ZENDESK_EMAIL' },
+                ] as const
+              ).map(({ key, label, envHint }) => {
+                const info = integrations?.[key];
+                const connected = info?.configured ?? false;
+                return (
+                  <div
+                    key={key}
+                    className={`rounded-lg border p-4 ${
+                      connected ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-block h-2.5 w-2.5 rounded-full ${
+                          connected ? 'bg-green-500' : 'bg-gray-300'
+                        }`}
+                      />
+                      <h3 className="text-sm font-medium text-gray-900">{label}</h3>
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {connected ? 'Connected' : `Not configured — set ${envHint}`}
+                    </p>
+                    {key !== 'slack' && key !== 'zendesk' && (
+                      <button
+                        onClick={() =>
+                          triggerSync(key === 'google' ? 'typeform' : key)
+                        }
+                        disabled={!connected || syncing !== null}
+                        className="mt-2 rounded bg-rho-600 px-3 py-1 text-xs font-medium text-white hover:bg-rho-700 disabled:opacity-40"
+                      >
+                        {syncing === key || syncing === 'typeform'
+                          ? 'Syncing...'
+                          : 'Sync Now'}
+                      </button>
+                    )}
+                    {key === 'google' && connected && (
+                      <button
+                        onClick={() => triggerSync('gmail')}
+                        disabled={syncing !== null}
+                        className="mt-2 ml-2 rounded bg-rho-600 px-3 py-1 text-xs font-medium text-white hover:bg-rho-700 disabled:opacity-40"
+                      >
+                        {syncing === 'gmail' ? 'Syncing...' : 'Sync Gmail'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-4">
+              <button
+                onClick={() => triggerSync('all')}
+                disabled={syncing !== null}
+                className="btn-primary"
+              >
+                {syncing === 'all' ? 'Syncing All...' : 'Sync All Integrations'}
+              </button>
+            </div>
           </section>
         </div>
       )}
