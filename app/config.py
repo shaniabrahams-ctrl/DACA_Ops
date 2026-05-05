@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     salesforce_username: str = ""
     salesforce_instance_url: str = "https://rho.my.salesforce.com"
 
+    # Zendesk
+    zendesk_subdomain: str = "https://rho.zendesk.com"
+    zendesk_email: str = ""
+    zendesk_api_token: str = ""
+
     # AI
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-4-6"

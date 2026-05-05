@@ -201,119 +201,78 @@ def generate_monthly_webster_report():
     """
     Generate monthly Webster Bank PDF + Excel report.
     Runs on the 1st of each month at 8AM ET.
-    Report is UPLOADED to Drive and a HumanReviewItem is created for approval
+    Reports are UPLOADED to Drive and a HumanReviewItem is created for approval
     before sending. Emails are NEVER auto-sent.
     """
     async def _run():
         from app.db.session import AsyncSessionLocal
-        from app.models.daca_request import DacaRequest, DacaRequestStatus
-        from app.models.account import Account
-        from app.models.borrower import Borrower
-        from app.models.lender import Lender
         from app.services import human_review_service
+        from app.services.webster_report_service import generate_excel, generate_pdf
         from app.integrations.google_drive import upload_file
         from app.config import settings
-        from sqlalchemy import select
-        import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment
-        from io import BytesIO
-        import calendar
+        from uuid import uuid4
 
         today = date.today()
         report_month = f"{today.strftime('%B')} {today.year}"
 
         async with AsyncSessionLocal() as db:
-            # Fetch all non-cancelled/terminated requests
-            result = await db.execute(
-                select(DacaRequest).where(
-                    DacaRequest.status.not_in([DacaRequestStatus.CANCELLED, DacaRequestStatus.TERMINATED])
-                ).order_by(DacaRequest.created_at.desc())
-            )
-            requests = list(result.scalars().all())
+            # Generate both report formats via the service
+            excel_bytes = await generate_excel(db)
+            pdf_bytes = await generate_pdf(db)
 
-            # Build Excel workbook
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = f"DACA Report {report_month}"
-
-            # Header row
-            headers = [
-                "Rho ID", "Business Name", "Status", "Lender", "Account #",
-                "Initial Inquiry", "Agreement Date", "Completion Date",
-                "Jira Ticket", "Note"
-            ]
-            header_fill = PatternFill("solid", fgColor="1F3864")
-            for col, header in enumerate(headers, 1):
-                cell = ws.cell(row=1, column=col, value=header)
-                cell.font = Font(color="FFFFFF", bold=True)
-                cell.fill = header_fill
-                cell.alignment = Alignment(horizontal="center")
-
-            # Data rows
-            for row_idx, req in enumerate(requests, 2):
-                borrower_name = ""
-                rho_id = ""
-                lender_name = ""
-
-                if req.borrower_id:
-                    b = await db.get(Borrower, req.borrower_id)
-                    if b:
-                        borrower_name = b.legal_name
-                        rho_id = b.rho_id or ""
-                if req.lender_id:
-                    l = await db.get(Lender, req.lender_id)
-                    if l:
-                        lender_name = l.institution_name
-
-                ws.cell(row=row_idx, column=1, value=rho_id)
-                ws.cell(row=row_idx, column=2, value=borrower_name)
-                ws.cell(row=row_idx, column=3, value=req.status)
-                ws.cell(row=row_idx, column=4, value=lender_name)
-                ws.cell(row=row_idx, column=5, value="")  # Account # — encrypted, omit
-                ws.cell(row=row_idx, column=6, value=req.created_at.strftime("%Y-%m-%d") if req.created_at else "")
-                ws.cell(row=row_idx, column=7, value="")  # Agreement date from Agreement model
-                ws.cell(row=row_idx, column=8, value="")  # Completion date
-                ws.cell(row=row_idx, column=9, value=req.jira_ticket_key or "")
-                ws.cell(row=row_idx, column=10, value="")
-
-            # Save to bytes
-            buffer = BytesIO()
-            wb.save(buffer)
-            excel_bytes = buffer.getvalue()
-
-            # Upload to Drive
-            file_name = f"Webster DACA Report — {report_month}.xlsx"
-            drive_result = await upload_file(
+            # Upload Excel to Drive
+            excel_name = f"Webster DACA Report — {report_month}.xlsx"
+            excel_drive_result = await upload_file(
                 file_content=excel_bytes,
-                file_name=file_name,
+                file_name=excel_name,
                 mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 folder_id=settings.drive_webster_reports_folder_id,
             )
 
+            # Upload PDF to Drive
+            pdf_name = f"Webster DACA Report — {report_month}.pdf"
+            pdf_drive_result = await upload_file(
+                file_content=pdf_bytes,
+                file_name=pdf_name,
+                mime_type="application/pdf",
+                folder_id=settings.drive_webster_reports_folder_id,
+            )
+
             # Create human review item — operator must approve before emailing to Webster
-            # Use the first active request's ID (or a system UUID) for the review item
-            from uuid import uuid4
+            # Need a daca_request_id for the review item; use first active request or a system UUID
+            from app.models.daca_request import DacaRequest, DacaRequestStatus
+            from sqlalchemy import select
+
+            result = await db.execute(
+                select(DacaRequest.id)
+                .where(DacaRequest.status.not_in([DacaRequestStatus.CANCELLED, DacaRequestStatus.TERMINATED]))
+                .limit(1)
+            )
+            first_req = result.scalar_one_or_none()
+
             await human_review_service.create_review_item(
                 db,
-                daca_request_id=requests[0].id if requests else uuid4(),
+                daca_request_id=first_req if first_req else uuid4(),
                 stage="MONTHLY_REPORT",
                 review_type="QA_CHECK",
                 payload={
                     "report_month": report_month,
-                    "drive_file_id": drive_result.get("id"),
-                    "drive_url": drive_result.get("webViewLink"),
+                    "excel_drive_file_id": excel_drive_result.get("id"),
+                    "excel_drive_url": excel_drive_result.get("webViewLink"),
+                    "pdf_drive_file_id": pdf_drive_result.get("id"),
+                    "pdf_drive_url": pdf_drive_result.get("webViewLink"),
                     "recipients": settings.webster_report_recipient_list,
                     "cc": settings.webster_report_cc_list,
                 },
-                agent_recommendation=f"Monthly Webster report generated for {report_month}. Review and approve to send.",
+                agent_recommendation=f"Monthly Webster report generated for {report_month} (PDF + Excel). Review and approve to send.",
                 agent_name="MonthlyReportTask",
             )
 
             await db.commit()
             return {
                 "report_month": report_month,
-                "drive_url": drive_result.get("webViewLink"),
-                "rows": len(requests),
+                "excel_drive_url": excel_drive_result.get("webViewLink"),
+                "pdf_drive_url": pdf_drive_result.get("webViewLink"),
             }
 
     return _run_async(_run())
