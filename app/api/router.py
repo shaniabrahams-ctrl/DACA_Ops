@@ -20,6 +20,7 @@ from app.api.v1 import (
     email_drafts,
     documents,
     sync,
+    zendesk_tickets,
 )
 
 api_router = APIRouter()
@@ -40,3 +41,4 @@ api_router.include_router(email_threads.router, prefix="/v1/email-threads", tags
 api_router.include_router(email_drafts.router, prefix="/v1/email-drafts", tags=["Email Drafts"])
 api_router.include_router(documents.router, prefix="/v1/documents", tags=["Documents"])
 api_router.include_router(sync.router, prefix="/v1/sync", tags=["Sync"])
+api_router.include_router(zendesk_tickets.router, prefix="/v1/zendesk-tickets", tags=["Zendesk"])

@@ -160,3 +160,29 @@ async def find_ticket_by_daca_ref(external_ref: str) -> dict[str, Any] | None:
     """Look up a Zendesk ticket by DACA external_ref (stored as external_id)."""
     results = await search_tickets(f"type:ticket external_id:{external_ref}")
     return results[0] if results else None
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=2, max=30))
+async def list_ticket_comments(ticket_id: int) -> list[dict[str, Any]]:
+    """List all comments on a Zendesk ticket (used to count for new-comment alerts)."""
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.get(
+            f"{_base_url()}/tickets/{ticket_id}/comments.json",
+            auth=_auth(),
+        )
+        response.raise_for_status()
+        return response.json().get("comments", [])
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=2, max=30))
+async def get_user(user_id: int) -> dict[str, Any] | None:
+    """Fetch a Zendesk user by ID (for resolving requester/assignee email)."""
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.get(
+            f"{_base_url()}/users/{user_id}.json",
+            auth=_auth(),
+        )
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return response.json().get("user")

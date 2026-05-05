@@ -18,11 +18,13 @@ async def _initial_sync():
     from app.services.jira_sync_service import sync_from_jira
     from app.services.typeform_sync_service import sync_typeform_submissions
     from app.services.gmail_sync_service import poll_and_sync_emails
+    from app.services.zendesk_sync_service import sync_zendesk_tickets
 
     for name, fn in [
         ("Jira", sync_from_jira),
         ("Typeform/Sheets", sync_typeform_submissions),
         ("Gmail", poll_and_sync_emails),
+        ("Zendesk", sync_zendesk_tickets),
     ]:
         try:
             logger.info("Running initial %s sync...", name)
@@ -37,14 +39,17 @@ async def _polling_loop():
     from app.services.jira_sync_service import sync_from_jira
     from app.services.typeform_sync_service import sync_typeform_submissions
     from app.services.gmail_sync_service import poll_and_sync_emails
+    from app.services.zendesk_sync_service import sync_zendesk_tickets
 
     gmail_interval = settings.gmail_poll_interval_seconds
     typeform_interval = settings.typeform_poll_interval_minutes * 60
     jira_interval = 5 * 60
+    zendesk_interval = 3 * 60
 
     gmail_counter = 0
     typeform_counter = 0
     jira_counter = 0
+    zendesk_counter = 0
     tick = 30
 
     while True:
@@ -52,6 +57,7 @@ async def _polling_loop():
         gmail_counter += tick
         typeform_counter += tick
         jira_counter += tick
+        zendesk_counter += tick
 
         if gmail_counter >= gmail_interval:
             gmail_counter = 0
@@ -73,6 +79,13 @@ async def _polling_loop():
                 await sync_from_jira()
             except Exception:
                 logger.exception("Jira polling error")
+
+        if zendesk_counter >= zendesk_interval:
+            zendesk_counter = 0
+            try:
+                await sync_zendesk_tickets()
+            except Exception:
+                logger.exception("Zendesk polling error")
 
 
 @asynccontextmanager

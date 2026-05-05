@@ -6,6 +6,7 @@ import ReviewQueue from './pages/ReviewQueue';
 import EmailDrafts from './pages/EmailDrafts';
 import Settings from './pages/Settings';
 import Reports from './pages/Reports';
+import Zendesk from './pages/Zendesk';
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="/requests/:id" element={<RequestDetail />} />
         <Route path="/reviews" element={<ReviewQueue />} />
         <Route path="/email-drafts" element={<EmailDrafts />} />
+        <Route path="/zendesk" element={<Zendesk />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/reports" element={<Reports />} />
       </Route>

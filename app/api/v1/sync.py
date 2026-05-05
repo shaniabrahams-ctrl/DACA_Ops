@@ -62,15 +62,29 @@ async def sync_gmail():
     return {"source": "gmail", "result": "complete"}
 
 
+@router.post("/zendesk")
+async def sync_zendesk():
+    """Manually trigger a Zendesk sync."""
+    from app.services.zendesk_sync_service import sync_zendesk_tickets
+    result = await sync_zendesk_tickets()
+    return {"source": "zendesk", "result": result}
+
+
 @router.post("/all")
 async def sync_all():
     """Trigger all syncs sequentially."""
     from app.services.jira_sync_service import sync_from_jira
     from app.services.typeform_sync_service import sync_typeform_submissions
     from app.services.gmail_sync_service import poll_and_sync_emails
+    from app.services.zendesk_sync_service import sync_zendesk_tickets
 
     results = {}
-    for name, fn in [("jira", sync_from_jira), ("typeform", sync_typeform_submissions), ("gmail", poll_and_sync_emails)]:
+    for name, fn in [
+        ("jira", sync_from_jira),
+        ("typeform", sync_typeform_submissions),
+        ("gmail", poll_and_sync_emails),
+        ("zendesk", sync_zendesk_tickets),
+    ]:
         try:
             r = await fn()
             results[name] = {"status": "ok", "result": r}

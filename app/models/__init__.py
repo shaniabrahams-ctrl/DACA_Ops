@@ -17,6 +17,7 @@ from app.models.oversight_config import OversightConfig
 from app.models.notification_channel import NotificationChannel
 from app.models.auth_config import AuthConfig
 from app.models.ops_manual_version import OpsManualVersion
+from app.models.zendesk_ticket import ZendeskTicket
 
 __all__ = [
     "Borrower", "Lender", "DacaRequest", "TypeformSubmission",
@@ -24,4 +25,5 @@ __all__ = [
     "Task", "Document", "EmailThread", "EmailDraft",
     "AuditLog", "HumanReviewItem", "AgentExecution",
     "OversightConfig", "NotificationChannel", "AuthConfig", "OpsManualVersion",
+    "ZendeskTicket",
 ]
