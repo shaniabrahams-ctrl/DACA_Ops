@@ -64,29 +64,35 @@ def _next_external_ref(year: int, sequence: int) -> str:
 async def search_jira_issues() -> list[dict[str, Any]]:
     """Search the CS project for all DACA-related issues using JQL.
 
-    Pages through results automatically and returns the full raw issue list.
+    Uses the enhanced search endpoint (/rest/api/3/search/jql) introduced in
+    May 2025 — the legacy /rest/api/3/search endpoint returns 410 Gone.
+    Pagination is cursor-based via nextPageToken.
     """
     if not settings.jira_api_token:
         logger.info("Jira API token not configured; skipping Jira search.")
         return []
 
     jql = f"project = {settings.jira_project_key} ORDER BY created DESC"
+    fields = ["summary", "description", "status", "priority", "assignee", "created", "updated"]
     all_issues: list[dict[str, Any]] = []
-    start_at = 0
+    next_page_token: str | None = None
     max_results = 100
 
     async with httpx.AsyncClient(timeout=30) as client:
         while True:
-            params = {
+            payload: dict[str, Any] = {
                 "jql": jql,
-                "startAt": start_at,
+                "fields": fields,
                 "maxResults": max_results,
-                "fields": "summary,description,status,priority,assignee,created,updated",
             }
-            resp = await client.get(
-                f"{_base_url()}/search",
+            if next_page_token:
+                payload["nextPageToken"] = next_page_token
+
+            resp = await client.post(
+                f"{_base_url()}/search/jql",
                 auth=_auth(),
-                params=params,
+                json=payload,
+                headers={"Accept": "application/json"},
             )
             resp.raise_for_status()
             data = resp.json()
@@ -94,10 +100,9 @@ async def search_jira_issues() -> list[dict[str, Any]]:
             issues = data.get("issues", [])
             all_issues.extend(issues)
 
-            # Check if there are more pages
-            total = data.get("total", 0)
-            start_at += len(issues)
-            if start_at >= total or not issues:
+            next_page_token = data.get("nextPageToken")
+            is_last = data.get("isLast", True)
+            if is_last or not next_page_token or not issues:
                 break
 
     logger.info("Fetched %d issues from Jira project %s.", len(all_issues), settings.jira_project_key)
