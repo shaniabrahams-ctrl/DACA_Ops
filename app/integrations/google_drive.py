@@ -20,17 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 def _build_service():
-    from google.oauth2 import service_account
     from googleapiclient.discovery import build
+    from app.integrations.google_auth import get_credentials
 
-    if not settings.google_service_account_json:
-        raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON not configured")
-
-    creds_info = json.loads(settings.google_service_account_json)
     scopes = ["https://www.googleapis.com/auth/drive"]
-    credentials = service_account.Credentials.from_service_account_info(
-        creds_info, scopes=scopes
-    )
+    credentials = get_credentials(scopes)
     return build("drive", "v3", credentials=credentials, cache_discovery=False)
 
 

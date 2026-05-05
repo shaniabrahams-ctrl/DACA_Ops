@@ -11,6 +11,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _google_status() -> dict:
+    from app.integrations.google_auth import auth_mode
+    mode = auth_mode()
+    return {
+        "configured": mode != "none",
+        "auth_mode": mode,  # "oauth_user" | "service_account" | "none"
+        "gmail_user": settings.gmail_delegated_user,
+        "typeform_sheet_id": settings.typeform_sheet_id,
+    }
+
+
 @router.get("/status")
 async def integration_status():
     """Show which integrations are configured and ready."""
@@ -20,12 +31,7 @@ async def integration_status():
             "base_url": settings.jira_base_url,
             "project_key": settings.jira_project_key,
         },
-        "google": {
-            "configured": bool(settings.google_service_account_json)
-            and not settings.google_service_account_json.startswith("/"),
-            "gmail_user": settings.gmail_delegated_user,
-            "typeform_sheet_id": settings.typeform_sheet_id,
-        },
+        "google": _google_status(),
         "slack": {
             "configured": bool(settings.slack_bot_token)
             and settings.slack_bot_token != "xoxb-",

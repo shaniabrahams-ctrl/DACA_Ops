@@ -130,9 +130,9 @@ async def poll_and_sync_emails() -> None:
 
     Designed to be called on a recurring schedule by the background task runner.
     """
-    creds = settings.google_service_account_json
-    if not creds or creds.startswith("/") or creds == "":
-        logger.debug("Gmail sync skipped — GOOGLE_SERVICE_ACCOUNT_JSON not configured")
+    from app.integrations.google_auth import auth_mode
+    if auth_mode() == "none":
+        logger.debug("Gmail sync skipped — no Google credentials configured")
         return
 
     try:

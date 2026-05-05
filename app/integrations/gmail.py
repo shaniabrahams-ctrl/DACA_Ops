@@ -20,37 +20,59 @@ logger = logging.getLogger(__name__)
 
 
 def _build_service():
-    """Build and return an authorized Gmail API service object."""
-    from google.oauth2 import service_account
+    """Build and return an authorized Gmail API service object.
+
+    With OAuth user credentials (interim setup), runs as the authenticated user
+    and queries that user's inbox.
+
+    With a service account + domain-wide delegation, impersonates
+    settings.gmail_delegated_user (daca@rho.co) and queries that mailbox
+    directly.
+    """
     from googleapiclient.discovery import build
+    from app.integrations.google_auth import get_credentials, auth_mode
 
-    if not settings.google_service_account_json:
-        raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON not configured")
-
-    creds_info = json.loads(settings.google_service_account_json)
     scopes = ["https://www.googleapis.com/auth/gmail.modify"]
-    credentials = service_account.Credentials.from_service_account_info(
-        creds_info, scopes=scopes
+
+    # Only delegate when using a service account; OAuth user runs as the user.
+    delegated_user = (
+        settings.gmail_delegated_user if auth_mode() == "service_account" else None
     )
-    delegated_credentials = credentials.with_subject(settings.gmail_delegated_user)
-    return build("gmail", "v1", credentials=delegated_credentials, cache_discovery=False)
+    credentials = get_credentials(scopes, delegated_user=delegated_user)
+    return build("gmail", "v1", credentials=credentials, cache_discovery=False)
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=2, max=30))
 async def poll_inbox(max_results: int = 20) -> list[dict[str, Any]]:
     """
-    Polls the daca@rho.co inbox for unread emails.
-    Returns a list of parsed message dicts.
+    Polls the inbox for unread DACA-related emails.
+
+    When running as a service account impersonating daca@rho.co, simply pulls
+    unread messages — every email there is by definition addressed to daca.
+
+    When running as a user (OAuth interim mode), filters to messages where
+    daca@rho.co is in From/To/CC so we don't pull the user's personal email.
     """
     import asyncio
+    from app.integrations.google_auth import auth_mode
     loop = asyncio.get_event_loop()
+
+    daca_addr = settings.gmail_delegated_user  # daca@rho.co
+    if auth_mode() == "oauth_user":
+        query = (
+            f"is:unread ("
+            f"to:{daca_addr} OR from:{daca_addr} OR cc:{daca_addr}"
+            f")"
+        )
+    else:
+        query = "is:unread"
 
     def _fetch():
         service = _build_service()
         results = (
             service.users()
             .messages()
-            .list(userId="me", q="is:unread", maxResults=max_results)
+            .list(userId="me", q=query, maxResults=max_results)
             .execute()
         )
         messages = results.get("messages", [])

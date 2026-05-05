@@ -219,9 +219,9 @@ async def sync_typeform_submissions() -> int:
 
     Returns the number of new submissions processed.
     """
-    creds = settings.google_service_account_json
-    if not creds or creds.startswith("/") or creds == "":
-        logger.info("Skipping Typeform sync: GOOGLE_SERVICE_ACCOUNT_JSON not configured")
+    from app.integrations.google_auth import auth_mode
+    if auth_mode() == "none":
+        logger.info("Skipping Typeform sync: no Google credentials configured")
         return 0
 
     async with AsyncSessionLocal() as db:
