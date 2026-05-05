@@ -31,6 +31,50 @@ export default function Settings() {
   const [syncing, setSyncing] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<string | null>(null);
 
+  // Slack notification channel
+  const [channelId, setChannelId] = useState('');
+  const [channelName, setChannelName] = useState('');
+  const [channelEnabled, setChannelEnabled] = useState(true);
+  const [channelSaving, setChannelSaving] = useState(false);
+  const [channelSaved, setChannelSaved] = useState(false);
+
+  const fetchChannel = useCallback(() => {
+    fetch('/api/v1/notification-channel')
+      .then((r) => r.json())
+      .then((data) => {
+        setChannelId(data.channel_id ?? '');
+        setChannelName(data.channel_name ?? '');
+        setChannelEnabled(data.enabled ?? true);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchChannel();
+  }, [fetchChannel]);
+
+  const handleSaveChannel = async () => {
+    setChannelSaving(true);
+    setChannelSaved(false);
+    try {
+      await fetch('/api/v1/notification-channel', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel_id: channelId,
+          channel_name: channelName,
+          enabled: channelEnabled,
+        }),
+      });
+      setChannelSaved(true);
+      setTimeout(() => setChannelSaved(false), 3000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save channel');
+    } finally {
+      setChannelSaving(false);
+    }
+  };
+
   const fetchIntegrations = useCallback(() => {
     fetch('/api/v1/sync/status')
       .then((r) => r.json())
@@ -339,6 +383,77 @@ export default function Settings() {
               >
                 {syncing === 'all' ? 'Syncing All...' : 'Sync All Integrations'}
               </button>
+            </div>
+          </section>
+
+          {/* Slack Notifications */}
+          <section className="card">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Slack Notifications
+            </h2>
+            <p className="mb-4 text-xs text-gray-500">
+              The Slack channel that receives DACA notifications (new emails to
+              daca@rho.co, Zendesk mentions, weekly status updates).
+            </p>
+
+            <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Channel Name
+                </label>
+                <input
+                  type="text"
+                  value={channelName}
+                  onChange={(e) => setChannelName(e.target.value)}
+                  placeholder="daca-ops"
+                  className="input-field"
+                />
+                <p className="mt-1 text-xs text-gray-400">
+                  Display name shown in the UI (e.g. "daca-ops")
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Channel ID
+                </label>
+                <input
+                  type="text"
+                  value={channelId}
+                  onChange={(e) => setChannelId(e.target.value)}
+                  placeholder="C0APFKNF8SY"
+                  className="input-field font-mono text-sm"
+                />
+                <p className="mt-1 text-xs text-gray-400">
+                  Slack channel ID (find in Slack → channel → "About" → "Channel ID")
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={channelEnabled}
+                  onChange={(e) => setChannelEnabled(e.target.checked)}
+                  className="h-4 w-4 rounded text-rho-600 focus:ring-rho-500"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  Enabled (uncheck to mute all notifications)
+                </span>
+              </label>
+            </div>
+
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                onClick={handleSaveChannel}
+                disabled={channelSaving || !channelId || !channelName}
+                className="btn-primary"
+              >
+                {channelSaving ? 'Saving...' : 'Save Channel'}
+              </button>
+              {channelSaved && (
+                <span className="text-sm text-green-600">Saved.</span>
+              )}
             </div>
           </section>
         </div>
