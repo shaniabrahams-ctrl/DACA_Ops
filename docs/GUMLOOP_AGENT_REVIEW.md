@@ -1,9 +1,9 @@
 # Review: DACA Gumloop Agents — What They Were Asked to Do, Where They Failed, and What We Carry Forward
 
 **Date:** 2026-06-10
-**Sources:** the "DACA context" agent handoff brief and the "DACA Monthly Reporter" context summary (both uploaded 6/10), plus directly observed behavior in #daca-ops and #daca-applications (Slack), the DACA Summary sheet, and Gmail.
+**Sources:** the "DACA context" agent handoff brief, the "DACA Monthly Reporter" context summary, and the "DACA TypeForm Processor" agent summary (all uploaded 6/10), plus directly observed behavior in #daca-ops and #daca-applications (Slack), the DACA Summary sheet, and Gmail.
 
-This review covers two agents: **Part A — "DACA context"** (the general-purpose assistant) and **Part B — "DACA Monthly Reporter"** (the monthly Webster report workflow).
+This review covers three agents: **Part A — "DACA context"** (general-purpose assistant), **Part B — "DACA Monthly Reporter"** (monthly Webster report), **Part C — "DACA TypeForm Processor"** (intake alerts), and closes with a **cross-agent synthesis (Part D)**.
 
 ---
 
@@ -102,3 +102,40 @@ The monthly report becomes a **generated view over the case register** (REDESIGN
 - Body copy fixed to match content ("Active and In-Progress DACAs, including any currently under lender control") — pending your wording preference.
 
 Priority-wise this stays behind the pipeline surface and weekly Download (per Part A §4), but it's the cheapest full demonstration of the register→view→verify→human-gate pattern, and a strong candidate for the first end-to-end workflow we ship.
+
+---
+
+# Part C — "DACA TypeForm Processor" agent
+
+## C1. The mandate
+
+Poll the Typeform-fed Google Sheet (`1Oog92OT…`, tab "DACA Application Form") every 5 minutes; on a new non-test row, post a structured alert to #daca-ops (lender, rep, borrower, contacts, has-Rho-account flag). Informational only — no ticket, no tracker row, no routing.
+
+## C2. Defects
+
+| # | Issue | Detail |
+|---|---|---|
+| 1 | **Its own spec admits the headline bug is unfixed** | §10: "Trigger fires multiple times for the same submission — Known/unresolved" and "Duplicate detection logic not yet implemented — Open," while §5 says dedupe "MUST be applied every time." The rule exists as prose; the trigger doesn't implement it. This produced the 5/6 Mile High triple-post (rows 77–80 are still duplicated *in the data*, not just the alerts) — the single clearest example of a prompt rule that needed to be a harness property. |
+| 2 | **Wrong dedupe key even as specified** | "Same lender+borrower combo in the last few rows" is a heuristic. Typeform assigns every response a unique token — the correct idempotency key. The heuristic both under-catches (dupes beyond "the last few rows") and over-catches (a legitimate corrected resubmission from the same lender/borrower would be silently suppressed). |
+| 3 | **Polling a sheet instead of consuming the form's webhook** | Typeform webhooks deliver each response exactly once with the response token. Polling row-diffs every 5 minutes is the architecture that *creates* the duplicate problem. |
+| 4 | **~60% of the production sheet is test noise** | 80 rows, ~32 real. Test data lives in the production intake sheet, handled by string-matching `"test"/"Test"` on the lender-name column (misses "TEST", "testing", etc.). Blank lender name → row silently skipped, but a real submission missing its lender name is a data-quality *alert*, not a skip. |
+| 5 | **Hardcoded 0-indexed column map** | Columns 0–25, including the duplicated rep blocks (6–11) inherited from the form's branching bug. Any Typeform edit silently shifts the mapping — alerts would post wrong data with full confidence. |
+| 6 | **Stale persistent memory, demonstrably** | Same mutable-file memory pattern as Part A (`context.md`, "restored across ALL conversations"). Its "current data state" says the latest real submission is Mile High (5/6) — but Post Acute Analytics submitted via Typeform on 5/22 (posted in #daca-ops by this very agent). The memory file is already wrong about the thing it exists to remember. |
+| 7 | **Alert format drift** | The spec's format (§8) matches none of the three observed alert formats in #daca-ops (5/6 vs 5/22 vs 5/26 differ in fields, emoji, and layout). Spec and behavior have diverged in both directions. |
+| 8 | **Dead-ends the workflow** | The alert carries the qualifier signal (Has Rho Account: No → should route to onboarding per SOP) but triggers nothing: no Jira ticket, no tracker row, no case linkage. A human must re-key everything — and ticket/row creation is a *different agent's* job (Part A §6.8), with no shared state between them. |
+
+## C3. What it got right
+The alert content selection is good (lender/borrower/contacts/Rho-account flag is exactly the triage information), test-row filtering is the right instinct, and channel discipline is explicit. The structured summary doc itself is well-organized — the *specs* of all three agents are consistently better than their *enforcement*.
+
+---
+
+# Part D — Cross-agent synthesis (all three)
+
+Looking across the three agents, the individual bugs are symptoms of four shared architectural decisions:
+
+1. **No shared state.** Three agents, three private memories (a KB markdown file, a `context.md`, prompt-embedded specs), all secondary to a spreadsheet none of them owns. The duplicate Slack alerts, duplicate Drive folders, duplicate sheet rows, and duplicate tracker rows are all the same missing primitive: **an idempotent shared case register**.
+2. **Rules live in prose, enforcement lives nowhere.** Every agent has thoughtful MUST-rules born from real incidents — and every observed failure violates one of its own written rules. Prompt text does not execute; harness code does.
+3. **Events are inferred, not consumed.** Polling sheets and re-classifying labeled email reconstructs events that the source systems (Typeform webhooks, DocuSign Connect, Jira webhooks) will simply *deliver*, exactly once, with stable IDs.
+4. **Agents interact only by colliding.** Part A's classifier special-cases Part B's outbound mail; Part C alerts on submissions that Part A separately processes into tickets; nobody reconciles. In the target design these are workflows over one register, so "coordination" is just reading the same state.
+
+**Intake future state (replaces Part C entirely):** Typeform webhook → register `intake` event keyed on response token (idempotent by construction) → validation (schema + business rules: Rho account exists, entity matches Salesforce, no open case for same entity+lender) → one Slack alert from a code-rendered template + an auto-drafted Jira ticket and case record for DRI approval → unqualified submissions auto-routed (no Rho account → onboarding path) with a drafted reply. Test submissions go to a separate sandbox form, never into production data.
