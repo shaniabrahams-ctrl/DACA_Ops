@@ -185,6 +185,59 @@ Open items to confirm before build (I'll walk you through these): which DocuSign
 
 ---
 
-## 5. Cross-cutting note
+## 5. Drive Document Repository (folder `121c4-xohOHgK8J_…`)
+
+### 5.1 Current structure (mapped 2026-06-10)
+
+```
+DACA (root)
+├── Webster Approved DACA Template/      → Rho Springing DACA Template (10.24.25).docx  ✓ clean
+├── Operations Manual/                   → Rho DACA Operations Manual vMar26.docx + previous versions/  ✓ versioned, ✗ stale (see 5.3)
+├── DACA Documents/
+│   ├── DACAs 2019-2022 / 2023 / 2024 / 2025 / 2026   (per-case folders by year)
+│   ├── Historical DACA Templates/
+│   ├── Surveys/                         ✗ name violates the "never say survey" language rule
+│   ├── Termination Agreements/          ✗ dormant — last filing 2023
+│   └── Amendments for Webster/          (2022-era)
+├── Working Folder/
+│   ├── DACA Summary (the tracker sheet)
+│   ├── Webster - Rho DACA Status List (Monthly)/   (report archive — fed by Monthly Reporter)
+│   ├── DACA Compliance Package Requirements (doc)
+│   └── DACA Intake Form 2/2022          ✗ obsolete
+└── DACA Program Notes (doc)             ✗ loose at root, untouched since 2023
+```
+
+### 5.2 Defects found
+
+1. **Duplicate case folders**: two identical "46826 - Bud Financial Inc." folders created 27 seconds apart (5/26 — a Gumloop reorg artifact; same idempotency failure class as the Slack duplicates). Post Acute Analytics also has two folders under different conventions.
+2. **Three naming conventions coexist in DACAs 2026**: `<BID> - <Entity>` vs `<YYYY-MM-DD> - <ENTITY> - <LENDER>` vs `Edwards Holdings (6 total entities)`. The auto-filing trigger "prefers" one — meaning it has to guess.
+3. **Termination filings broken**: the termination SOP requires filing to the "Termination Agreements" subfolder; nothing has been filed there since 2023. Champion Transportation (terminated 5/15/26) is not there. Initial/Disposition Instruction letters (e.g., the March Unshaken/NHJM trigger events, COMPLHELP-2342/2343) have **no designated home at all**.
+4. **Webster-facing manual stale** — see 5.3 / the documentation-currency skill.
+5. Root clutter: obsolete 2022 intake form, 2023 program notes doc.
+
+### 5.3 Target taxonomy + minimum filing requirements
+
+One folder per case, one convention, lifecycle-complete:
+
+```
+DACA Documents/DACAs <YYYY>/<BID> - <Entity Legal Name>/
+    01-application/      DACA request application PDF, loan agreement
+    02-agreement/        redline versions (if any), executed DACA + DocuSign certificate
+    03-compliance/       affirmation (or legacy compliance package)
+    04-trigger/          Initial Instruction, Disposition Instruction, verification evidence
+    05-termination/      termination notice, legal confirmation, release
+```
+
+**Minimum mandatory filings (the agent/tool MUST capture these, with case-register `documents` rows + hashes):**
+- Executed DACA agreement + Certificate of Completion (auto via DocuSign webhook)
+- Termination notices and confirmations (currently falling on the floor)
+- Initial Instructions / Disposition Instructions and the verification evidence behind acting on them (these are the highest-stakes documents in the program — they authorize moving control of client funds)
+- Compliance affirmations sent to Webster; monthly report artifacts (already archived ✓)
+
+Migration notes: dedupe the Bud folders; merge the two Post Acute folders; rename `Surveys/` → `Applications (legacy)/`; keep per-entity subfolders inside "Edwards Holdings (6 total entities)" but rename to convention; archive the 2022 intake form and 2023 notes into an `Archive/` folder. Multi-entity deals get one folder per entity (the agreement is per-entity) plus a shortcut grouping folder if desired.
+
+---
+
+## 6. Cross-cutting note
 
 All four redesigns assume the same backbone: the **case register + append-only event log** (§1.3). The weekly Download is a query over it, the intake form writes into it, DocuSign webhooks update it, and the audit export dumps it. That's one system to keep correct instead of four artifacts to keep synchronized — which is the unit-drive redesign, not a faster steam engine.
