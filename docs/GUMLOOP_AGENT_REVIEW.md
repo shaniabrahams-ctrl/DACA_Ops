@@ -1,7 +1,13 @@
-# Review: "DACA context" Gumloop Agent — What It Was Asked to Do, Where It Failed, and What We Carry Forward
+# Review: DACA Gumloop Agents — What They Were Asked to Do, Where They Failed, and What We Carry Forward
 
 **Date:** 2026-06-10
-**Sources:** the agent's context-handoff brief (uploaded 6/10), plus directly observed behavior in #daca-ops and #daca-applications (Slack), the DACA Summary sheet, and Gmail.
+**Sources:** the "DACA context" agent handoff brief and the "DACA Monthly Reporter" context summary (both uploaded 6/10), plus directly observed behavior in #daca-ops and #daca-applications (Slack), the DACA Summary sheet, and Gmail.
+
+This review covers two agents: **Part A — "DACA context"** (the general-purpose assistant) and **Part B — "DACA Monthly Reporter"** (the monthly Webster report workflow).
+
+---
+
+# Part A — "DACA context" agent
 
 ---
 
@@ -51,3 +57,48 @@ The behavioral rules are genuinely good and hard-won — they encode your correc
 ## 4. Disposition recommendation
 
 Keep the Gumloop agent running untouched while we build (it's load-bearing for alerts and the weekly draft). Migrate workflow-by-workflow onto the case register, retiring each trigger only after its replacement has run in shadow mode for at least one full cycle with receipts verified. Highest-value first: (1) status/pipeline surface, (2) weekly Download generation, (3) DocuSign webhook ingestion, (4) intake. Also: re-import the lost KB content (46 historical tickets, precedents) **into git** as part of step 1 so the loss event can't recur.
+
+---
+
+# Part B — "DACA Monthly Reporter" agent
+
+## B1. The mandate
+
+Monthly (1st @ 9:00 AM ET, for the previous month-end): read the `2026` tracker tab → filter to Active/Blocked/In progress → renumber sequentially → generate PDF + Excel ("Rho<>Webster DACAs List - YYYY-MM-DD") → rewrite the `WebsterReport` tab → archive both files to a monthly Drive subfolder → create a Gmail draft to Sttef/Sarah/Kevin (cc daca@rho.co) for Shani to review and send.
+
+## B2. What it gets right
+
+This is the best-designed of the two agents, and its spec quality shows what "workflow over open-ended agent" buys:
+
+1. **Draft-only delivery** — Shani reviews and sends; the human gate is structural.
+2. **Permanent Drive archive per month** — an actual sent-artifact audit trail.
+3. **Deterministic written rules** (filter set, renumbering, file naming, formats) instead of per-run improvisation.
+4. **Renumber-after-filter rule** correctly anticipates a real error class (sheet `#` gaps leaking into the report).
+
+## B3. Defects and risks
+
+| # | Issue | Detail |
+|---|---|---|
+| 1 | **Inherits every tracker defect (GIGO)** | The report is a projection of the 2026 tab — which has duplicate rows, stale statuses, and missing dates (REDESIGN_PROPOSALS §1.2). Example: if the duplicate POST ACUTE rows were both in an included status, Webster would receive a double-counted list. There is no dedupe-by-Business-ID and no anomaly check before send. |
+| 2 | **Incomplete status filter spec** | The filter table enumerates only 5 statuses, but the sheet actually contains at least 7 (also "Fraud Initial Review", "TERMINATED", "Rejected"). Unlisted statuses fall through to *implicit* behavior. The May termination was excluded by Shani's manual judgment, not by a written rule — exactly the kind of silent dependency on one person's memory this process shouldn't have. |
+| 3 | **Email body vs. content mismatch** | Body says "Active and In-progress" but the report includes **Blocked** (triggered) DACAs too — a partner-bank-facing wording inaccuracy waiting for a question from Webster. |
+| 4 | **Hardcoded clear range `A1:E60`** | At 44 rows and growing, once the list passes ~57 entries, stale rows below row 60 would survive a rewrite. Silent truncation/corruption mode. |
+| 5 | **No month-end cutoff logic** | Runs on the 1st against *current* sheet state. A DACA executed May 31 but recorded June 2 is missing from the May report; one completed June 1 at 8am would wrongly appear. No as-of-date filtering on event data. |
+| 6 | **No receipts, no dead-man switch** | Nothing verifies the draft was created, that attachment row counts match the filtered query, or — critically — that the draft was ever **sent**. If the DRI is OOO on the 1st (Vladan's OOO this month shows how real this is), the report silently doesn't go out. |
+| 7 | **Continuity hardcoded to one person** | Signature, sender, and reviewer are all Shani by name (including a job title the other agent's style rules prohibit). No backup path from the DRI table; the user's stated goal — continuity through org changes — is unmet by design. |
+| 8 | **Fragile plumbing** | The 4-hop clean-filename workaround (sandbox → storage → Drive → download-back → draft) exists to patch a platform limitation; each hop is an unverified failure point. |
+| 9 | **Cross-agent interference** | The other agent's email-alert classifier had to be special-cased to *not* alert on this agent's own outbound report — two agents working around each other with no shared state. |
+| 10 | **Snapshot-only content** | Sttef must manually diff against last month to see what's new/completed/terminated. The single most useful piece of information — the delta — is absent. |
+
+## B4. Future state (register-backed, same human gate)
+
+The monthly report becomes a **generated view over the case register** (REDESIGN_PROPOSALS §1.3):
+
+- **Inclusion by rule over a closed enum** — every lifecycle/control state is explicitly mapped in/out; a new status cannot silently fall through. Dedupe by case ID is structural.
+- **As-of-date correctness** — the report is computed from the event log *as of month-end*, so late-recorded events land in the right month, and a regenerated report for any past month is reproducible (audit requirement).
+- **Delta section** — "Changes since last report: +2 executed (names, dates), 1 terminated (name, date, secured party)" — generated from events between the two report dates.
+- **Verifier separate from generator** — a manifest (row count, included IDs, content hash) is recomputed independently from the register and must match the artifacts before the draft is created; mismatch blocks and pages.
+- **Receipts + dead-man switch** — draft creation, archive upload, and the human send are all logged events; unsent by the 3rd → reminder to the DRI; unsent by the 5th → escalate to the backup from the DRI table. Sender identity, signature, and backups come from config, not hardcoded prose — **continuity survives personnel changes because the process is code + config in git, not knowledge in someone's head**.
+- Body copy fixed to match content ("Active and In-Progress DACAs, including any currently under lender control") — pending your wording preference.
+
+Priority-wise this stays behind the pipeline surface and weekly Download (per Part A §4), but it's the cheapest full demonstration of the register→view→verify→human-gate pattern, and a strong candidate for the first end-to-end workflow we ship.
