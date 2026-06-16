@@ -36,7 +36,9 @@ class GmailMessage:
     cc: list[str]
     subject: str
     snippet: str
-    body: Optional[str] = None     # Populated when full thread is fetched
+    body: Optional[str] = None       # Populated when full thread is fetched
+    attachments: list[dict] = None   # [{attachmentId, filename, mimeType, size}]
+                                     # Populated from FULL_CONTENT response
 
 
 @dataclass

@@ -9,16 +9,24 @@ DESIGN PRINCIPLE:
 
 WHAT IT DOES:
   1. Queries every relevant source (Gmail, Jira, Typeform, Drive) in parallel
-  2. Builds a structured CaseRecord with full timeline, party manifest,
+  2. Scans all Gmail thread attachments — extracts, downloads, and fingerprints
+     every DACA document attached to any email in the case threads
+  3. Cross-checks attachment provenance: flags if Rho sent the client their
+     own document back, or if no WB revision authors appear in any outbound doc
+  4. Builds a structured CaseRecord with full timeline, party manifest,
      document inventory, and sourced facts
-  3. Runs all discrepancy checks — flags blockers before any operation proceeds
-  4. Returns a DocuSign readiness score and missing-field list
+  5. Runs all discrepancy checks — flags blockers before any operation proceeds
+  6. Returns a DocuSign readiness score and missing-field list
 
-WHY MULTI-SOURCE SEARCH MATTERS (Anonos post-mortem):
-  The version mixup that cost 2 weeks was only visible in the WB ShareFile
-  notification thread — a thread that a single-query Gmail search would
-  miss entirely. The loader runs 6+ query variants per case to ensure
-  all relevant threads are found regardless of which parties were cc'd.
+ATTACHMENT SCANNING (ShareFile gap redundancy):
+  ShareFile notifications go to whoever uploaded/downloaded — often Sam Davidson.
+  If Sam doesn't forward them to daca@rho.co, the version agent loses its
+  primary detection path. The attachment scanner provides a second path:
+  - Reads what was actually attached to emails between Rho and the client
+  - Compares outbound Rho attachments against client-submitted attachments
+  - Flags content-equivalent documents even without ShareFile visibility
+  This would have caught the Anonos failure via the 6/10 emails alone:
+  Shani's attachment to Joseph had the same content as Joseph's 6/1 attachment.
 
 AGENT USAGE PATTERN:
   record = await loader.load(case_id="Anonos Innovations LLC")
@@ -38,6 +46,11 @@ from src.context.record import (
     DocuSignReadiness, Source, SourceType, Severity,
 )
 from src.context.sources.gmail import build_search_queries, tag_thread, extract_document_events
+from src.context.sources.attachment_scanner import (
+    extract_attachment_records_from_thread,
+    download_and_fingerprint_attachments,
+    cross_check_attachments,
+)
 from src.context.analysis.discrepancies import run_all_checks
 
 
@@ -97,6 +110,11 @@ class CaseContextLoader:
             gmail_task, jira_task, typeform_task, drive_task
         )
 
+        # Scan email attachments — second detection path independent of ShareFile
+        # notifications. Downloads and fingerprints DACA docs from all thread emails,
+        # then cross-checks for outbound = client-submitted matches.
+        attachment_flags = await self._scan_thread_attachments(gmail_threads)
+
         # Extract structured facts from all sources
         timeline = self._build_timeline(gmail_threads, jira_tickets)
         entities = self._extract_entities(entity_names, typeform_rows, gmail_threads)
@@ -131,13 +149,97 @@ class CaseContextLoader:
             discrepancy_flags=[],
         )
 
-        # Run all cross-source checks — this is where version mismatches surface
+        # Run structural discrepancy checks
         record.discrepancy_flags = run_all_checks(record)
+
+        # Merge attachment-level version flags — these fire even when ShareFile
+        # notifications were not forwarded to daca@rho.co
+        record.discrepancy_flags.extend(
+            self._attachment_flags_to_discrepancies(attachment_flags)
+        )
 
         # Build DocuSign readiness per entity
         record.docusign_readiness = self._score_docusign_readiness(record)
 
         return record
+
+    async def _scan_thread_attachments(self, threads: list) -> list[dict]:
+        """
+        For every thread, extract attachment metadata and download DACA documents.
+        Cross-check attachment provenance to detect version mismatches.
+
+        This runs against Gmail thread data we already fetched — no extra
+        network requests for the thread list, only for the attachment bytes.
+        """
+        all_attachment_records = []
+        for thread in threads:
+            # Convert our internal GmailThread object to the dict shape
+            # that extract_attachment_records_from_thread expects
+            thread_dict = {
+                "id": thread.id,
+                "messages": [
+                    {
+                        "id": m.id,
+                        "sender": m.sender,
+                        "toRecipients": m.to,
+                        "ccRecipients": m.cc,
+                        "date": m.date.isoformat(),
+                        "attachments": m.attachments if hasattr(m, "attachments") else [],
+                    }
+                    for m in thread.messages
+                ],
+            }
+            records = extract_attachment_records_from_thread(thread_dict)
+            all_attachment_records.extend(records)
+
+        if not all_attachment_records:
+            return []
+
+        # Download and fingerprint — parallel fetch of attachment bytes
+        fingerprinted = await download_and_fingerprint_attachments(
+            all_attachment_records, self.gmail
+        )
+
+        # Cross-check provenance
+        return cross_check_attachments(fingerprinted)
+
+    def _attachment_flags_to_discrepancies(self, flags: list[dict]) -> list:
+        """Convert attachment scanner flag dicts to DiscrepancyFlag objects."""
+        from src.context.record import DiscrepancyFlag, DiscrepancyKind, Severity, Source, SourceType
+        from datetime import timezone
+
+        discrepancies = []
+        for flag in flags:
+            kind_map = {
+                "rho_sent_client_version_back": DiscrepancyKind.WRONG_DOCUMENT_VERSION,
+                "outbound_missing_wb_revisions": DiscrepancyKind.WRONG_DOCUMENT_VERSION,
+                "no_wb_doc_in_thread": DiscrepancyKind.MISSING_WB_APPROVAL,
+            }
+            severity_map = {
+                "BLOCKER": Severity.BLOCKER,
+                "WARNING": Severity.WARNING,
+            }
+            kind = kind_map.get(flag.get("kind"), DiscrepancyKind.WRONG_DOCUMENT_VERSION)
+            severity = severity_map.get(flag.get("severity", "WARNING"), Severity.WARNING)
+
+            evidence = []
+            ev = flag.get("evidence", {})
+            for msg_id_key in ["outbound_message_id", "client_submitted_message_id"]:
+                if ev.get(msg_id_key):
+                    evidence.append(Source(
+                        source_type=SourceType.GMAIL,
+                        source_id=ev[msg_id_key],
+                        date=datetime.now(timezone.utc),
+                        excerpt=flag.get("description", "")[:200],
+                    ))
+
+            discrepancies.append(DiscrepancyFlag(
+                kind=kind,
+                severity=severity,
+                description=flag.get("description", ""),
+                evidence=evidence,
+            ))
+        return discrepancies
 
     async def _load_gmail_threads(self, queries: list[str]) -> list:
         """
@@ -409,6 +511,14 @@ class CaseContextLoader:
         from src.context.sources.gmail import GmailThread, GmailMessage
         messages = []
         for m in result.get("messages", []):
+            # Extract attachment metadata from FULL_CONTENT response
+            # Gmail MCP returns attachment_ids; we normalize to the shape
+            # attachment_scanner expects: [{attachmentId, filename, mimeType, size}]
+            raw_attachments = m.get("attachments") or []
+            if not raw_attachments and m.get("attachment_ids"):
+                # Older response shape: just a list of IDs, no metadata
+                raw_attachments = [{"attachmentId": aid} for aid in m["attachment_ids"]]
+
             messages.append(GmailMessage(
                 id=m.get("id", ""),
                 thread_id=result.get("id", ""),
@@ -419,6 +529,7 @@ class CaseContextLoader:
                 subject=m.get("subject", ""),
                 snippet=m.get("snippet", ""),
                 body=m.get("plaintextBody"),
+                attachments=raw_attachments,
             ))
         return GmailThread(
             id=result.get("id", ""),
