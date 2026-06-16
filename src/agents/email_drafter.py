@@ -31,6 +31,7 @@ from typing import Optional
 from src.context.record import CaseRecord
 from src.learning.style_synthesizer import load_current_style_guide
 from src.learning.draft_evaluator import evaluate_draft, DraftEvaluation, format_evaluation_for_human
+from src.learning.terminology_mapper import sanitize_for_client
 
 
 EMAIL_TYPE_INSTRUCTIONS = {
@@ -123,14 +124,21 @@ async def generate_draft(
 
     draft_text = response.content[0].text.strip()
 
+    # Sanitize for client-facing language (mandatory terminology mappings)
+    sanitized_draft, terminology_issues = sanitize_for_client(draft_text)
+
     evaluation = evaluate_draft(
-        draft=draft_text,
+        draft=sanitized_draft,
         anthropic_client=anthropic_client,
         email_type=email_type,
     )
 
+    # If there were terminology issues, inject them into the evaluation flags
+    if terminology_issues:
+        evaluation.flags.extend(terminology_issues)
+
     return DraftResult(
-        draft_text=draft_text,
+        draft_text=sanitized_draft,
         email_type=email_type,
         evaluation=evaluation,
         evaluation_summary=format_evaluation_for_human(evaluation),
