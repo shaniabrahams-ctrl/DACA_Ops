@@ -75,6 +75,23 @@ Script: `src/operations/prefill_daca.py` (run with entity name as argument)
 
 Always verify the template hash before use. If the hash differs, stop and notify the DRI — Webster may have issued a new version.
 
+## DocuSign signing order (must follow exactly)
+
+The DACA has **four** distinct signature blocks. Do not confuse lender contact (Typeform) with lender signer (DACA):
+
+| Order | Party | Who signs | Standard signer |
+|---|---|---|---|
+| 1 | Debtor (Borrower) | Client-side authorized signatory | Varies — from Typeform / Jira compliance notes |
+| 2 | Secured Party (Lender) | Lender's authorized signatory | Provided by borrower or lender directly — **not** the Typeform contact rep |
+| 3 | Platform (Rho) | Rho CFO | Mike Szarowicz · mike.szarowicz@rho.co · CFO |
+| 4 | Bank (Webster) | Webster Executive Managing Director | **Melissa Santos · mesantos@websterbank.com · Executive Managing Director** (source: Rho DACA Process SOP, Notion `245db9eb-a4f0-800c-816c-cb5a02133f81`, Step 10) |
+
+> Note: The Typeform lender contact (e.g., Grant Sweitzer for Soryn) is the **rep/contact**, not necessarily the DACA signer. The authorized signer for the Secured Party is obtained separately from the borrower or lender directly.
+
+## Exhibits A, B, C
+
+Exhibits are **template examples only** — they are intentionally left with their bracketed placeholders at the pre-fill stage. Do **not** attempt to fill exhibit placeholders during pre-fill. They are completed at execution time (DocuSign).
+
 ## Placeholder map
 
 | Placeholder in template | Source | Notes |
@@ -124,26 +141,28 @@ Sources checked: Gmail ✓ | Jira CSHELP-XXXX ✓ | Typeform PDF ✓ | DACA Summ
 - <any compliance/signer authorization issues>
 ```
 
-## Anonos case reference (2026-06-15)
+## Anonos / Sonona case reference (2026-06-15)
 
 Completed case — use as reference for future multi-entity, multi-fund cases.
 
-| Field | Anonos Innovations LLC | Anonos Technologies LLC |
-|---|---|---|
-| BID | 49596 | 50258 |
-| Jira | CSHELP-8871 | CSHELP-8871 |
-| Debtor address | 7950 Legacy Drive, Suite 400, Plano, TX 75024 | 1603 Capitol Ave Ste 415-936874, Cheyenne, WY 82001 |
-| Secured Party | Soryn IP Fund II, L.P.; Soryn IP Fund II Evergreen, L.P.; Soryn IP Parallel Fund II, L.P. | ← same |
-| SP address | 45 Essex St., Suite 201, Millburn, NJ 07041 | ← same |
-| SP rep | Grant Sweitzer · (717) 330-2004 · grant@sorynipcap.com | ← same |
-| Signer (Debtor) | Joseph Sciascia (account owner on both) | ← same |
-| Accounts | 3 checking | 1 checking |
-| Transfer | ACH | ACH |
-| Template used | WB redline revisions v4_4 | ← same |
-| Pre-filled file | `docs/prefilled_dacas/Rho_Springing_DACA_Anonos_Innovations_LLC_PREFILL.docx` | `docs/prefilled_dacas/Rho_Springing_DACA_Anonos_Technologies_LLC_PREFILL.docx` |
-| Drive case folder | `1MkzYSt4pQVdHgtkoqMK06LapPMKxu4wt` | `1Xd4y8SwYoECCsrhwWOplHRtrx4m7SWGb` |
+| Field | Anonos Innovations LLC | Anonos Technologies LLC | Sonona LLC |
+|---|---|---|---|
+| BID | 49596 | 50258 | 51313 |
+| Jira | CSHELP-8871 | CSHELP-8871 | CSHELP-8871 |
+| Debtor address | 7950 Legacy Drive, Suite 400, Plano, TX 75024 | 1603 Capitol Ave Ste 415-936874, Cheyenne, WY 82001 | 1603 Capitol Ave Ste 415-936874, Cheyenne, WY 82001 |
+| Secured Party | Soryn IP Fund II, L.P.; Soryn IP Fund II Evergreen, L.P.; Soryn IP Parallel Fund II, L.P. | ← same | ← same |
+| SP address | 45 Essex St., Suite 201, Millburn, NJ 07041 | ← same | ← same |
+| SP Typeform contact | Grant Sweitzer · (717) 330-2004 · grant@sorynipcap.com | ← same | ← same |
+| SP DACA signer | Michael Gulliford · Managing Partner | ← same | ← same |
+| Signer (Debtor) | Joseph Sciascia · CFO (account owner) | ← same | Nancy Myerson · Managing Member (confirmed in internal docs) |
+| Signer (Rho/Platform) | Mike Szarowicz · CFO | ← same | ← same |
+| Signer (Webster/Bank) | Melissa Santos · Executive Managing Director | ← same | ← same |
+| Accounts | 3 checking | 1 checking | [pending — BID 51313] |
+| Transfer | ACH | ACH | ACH |
+| Template used | WB redline revisions v4_4 | ← same | ← same |
+| Drive case folder | `1MkzYSt4pQVdHgtkoqMK06LapPMKxu4wt` | `1Xd4y8SwYoECCsrhwWOplHRtrx4m7SWGb` | [pending] |
 
-**Pending as of 2026-06-17:** Execution date, entity types, Joseph Sciascia's title, Grant Sweitzer's title, account numbers for both entities.
+**Pending as of 2026-06-17:** Execution date, entity types for all three, account numbers for all three (pull from Rho dashboard by BID).
 
 ## Output files
 
