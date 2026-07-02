@@ -19,6 +19,7 @@ class SourceType(str, Enum):
     TYPEFORM = "typeform"
     DRIVE = "drive"
     SLACK = "slack"
+    ZENDESK = "zendesk"
 
 
 class DiscrepancyKind(str, Enum):
@@ -107,6 +108,27 @@ class JiraTicket:
 
 
 @dataclass
+class ZendeskTicket:
+    """
+    A client-facing Zendesk ticket — distinct from the internal Jira/CSHELP
+    ticket. Jira tracks the case end-to-end (intake -> compliance -> signing);
+    Zendesk is where the client actually writes in and where Rho replies,
+    attaches documents, and shares SendSafely links.
+
+    One DACA case may have zero, one, or several Zendesk tickets (e.g. the
+    client opens a new ticket instead of replying to the old thread).
+    """
+    id: str                      # Zendesk numeric ticket ID (as string)
+    url: str
+    subject: str
+    status: str                  # Zendesk status: new/open/pending/hold/solved/closed
+    requester_email: str
+    tags: list[str] = field(default_factory=list)
+    created: Optional[datetime] = None
+    events: list[TimelineEvent] = field(default_factory=list)
+
+
+@dataclass
 class OpenItem:
     description: str
     owner: str                  # who must resolve it
@@ -156,6 +178,7 @@ class CaseRecord:
     open_items: list[OpenItem]
     discrepancy_flags: list[DiscrepancyFlag]
     docusign_readiness: list[DocuSignReadiness] = field(default_factory=list)
+    zendesk_tickets: list[ZendeskTicket] = field(default_factory=list)
 
     @property
     def blockers(self) -> list[DiscrepancyFlag]:
@@ -176,6 +199,7 @@ class CaseRecord:
             f"Timeline events: {len(self.timeline)}",
             f"Documents: {len(self.documents)}",
             f"Jira tickets: {[t.key for t in self.jira_tickets]}",
+            f"Zendesk tickets: {[(t.id, t.status) for t in self.zendesk_tickets]}",
             f"Open items: {len(self.open_items)} ({sum(1 for i in self.open_items if i.blocking)} blocking)",
             f"Discrepancy flags: {len(self.discrepancy_flags)} "
             f"({len(self.blockers)} blockers)",
