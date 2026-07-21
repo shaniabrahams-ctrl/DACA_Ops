@@ -17,21 +17,32 @@ import os
 
 from src.agents.email_drafter import DRAFTING_SYSTEM_BASE, EMAIL_TYPE_INSTRUCTIONS
 
-# Human labels + the one type email_drafter doesn't cover: a brand-new inquiry.
+# Draft types mirror the SOP's email macros (Notion "Rho DACA Process"), so a drafted
+# reply matches the approved wording. Plus two generic helpers (status / follow-up).
 TYPES = [
-    ("new_inquiry", "Welcome / new inquiry"),
-    ("outstanding_items", "Request outstanding items"),
+    ("intro_kickoff", "Intro / kick-off (send application)"),
+    ("template_distribution", "Send Springing DACA template"),
+    ("docusign_sent", "DocuSign sent"),
+    ("execution_complete", "Fully executed — distribute"),
     ("status_update", "Status update"),
     ("follow_up", "Follow-up"),
 ]
-_NEW_INQUIRY_INSTRUCTION = (
-    "Write a warm first reply to a client who just asked to set up a DACA. Introduce "
-    "yourself as their Rho DACA contact, then ask them to confirm: the borrower legal "
-    "entity + Rho account(s) to cover; the lender/secured party (legal name + contact) "
-    "and the account being controlled; and to upload the loan/security agreement via the "
-    "secure link. Offer a call. Do not invent entity, lender, or account details."
-)
+_INSTRUCTIONS = {  # SOP intent per type, for the AI-polish pass
+    "intro_kickoff": ("Warm first reply: introduce yourself as the client's Rho DACA contact, note "
+                      "Rho offers Springing DACAs only (checking accounts only), send the DACA "
+                      "request application (Typeform) link, and say the standard template follows "
+                      "after initial review. Recommend a net-new DACA account. Don't invent details."),
+    "template_distribution": ("Send the standard Springing DACA template for the client and lender to "
+                              "review; note redlines are typically not accepted; next step is DocuSign "
+                              "once all parties align."),
+    "docusign_sent": ("Tell client + lender the DACA was sent via DocuSign (Rho Client Service, "
+                      "contracts@docusign.rho.co), signing order Borrower → Lender → Rho → Webster, "
+                      "Webster countersigns in 2–5 business days, then we distribute the executed copy."),
+    "execution_complete": ("Confirm the DACA is fully signed by all parties; attach the executed copy; "
+                           "note the client retains control unless a trigger event occurs."),
+}
 SENDSAFELY = "https://rho.sendsafely.com/dropzone/daca"
+TYPEFORM = "https://t7w5kbgrsc2.typeform.com/to/f5xT4WRX"
 
 
 def _first_name(person: str, email: str) -> str:
@@ -53,29 +64,51 @@ def _context(case, parties, last_note: str) -> dict:
 
 def _template(email_type: str, ctx: dict, rep_name: str) -> str:
     hi = f"Hi {ctx['contact_first']},"
-    sign = f"\n\nBest,\n{rep_name}"
-    if email_type == "new_inquiry":
-        hint = f" (re: {ctx['note']})" if ctx["note"] else ""
-        return (f"{hi}\n\nThanks for reaching out about setting up a Deposit Account Control "
-                f"Agreement (DACA). I'll be your point of contact on the Rho DACA team and will "
-                f"help move this forward.\n\nTo get started, could you confirm:\n"
-                f"  1. The borrower legal entity name(s) and the Rho account(s) the DACA should cover.\n"
-                f"  2. The lender / secured party (legal name and a contact){hint}.\n"
-                f"  3. The loan or security agreement — you can upload it securely here: {SENDSAFELY}\n\n"
-                f"Once we have these, we'll prepare the agreement for signature. Happy to hop on a "
-                f"quick call if that's easier.{sign}")
-    if email_type == "outstanding_items":
-        na = f"\n  - {ctx['next_action']}" if ctx["next_action"] else ""
-        return (f"{hi}\n\nA quick update on your DACA. To keep things moving we still need the "
-                f"following from you:{na or ' (see below)'}\n\nPlease send anything sensitive via "
-                f"{SENDSAFELY}. Let me know if any of this is unclear.{sign}")
+    hello = f"Hello {ctx['contact_first']},"
+    best = f"\n\nBest,\n{rep_name}"
+    sincerely = f"\n\nSincerely,\n{rep_name}"
+    entity = ctx["entity"]
+    if email_type == "intro_kickoff":  # SOP: DACA Intro / Process Kick-off
+        return (f"{hi}\n\nIt's a pleasure to meet you! I'm {rep_name} on the Rho DACA team, and I'll "
+                f"be assisting you with getting your DACA set up.\n\nPlease note that Rho supports "
+                f"Springing DACAs only and does not offer fully blocked DACA products.\n\nTo begin, "
+                f"please complete our DACA request application: {TYPEFORM}. This lets us collect "
+                f"preliminary details and your lender's contact information.\n\nFollowing our initial "
+                f"review, we'll share Rho's standard Springing DACA template for you and your lender "
+                f"to review as the next step. We'd also recommend using a net-new account for the "
+                f"DACA rather than your primary account.\n\nPlease don't hesitate to reach out with "
+                f"any questions.{sincerely}")
+    if email_type == "template_distribution":  # SOP Macro 1
+        return (f"{hi}\n\nThank you for your patience while our team reviewed your request.\n\nI've "
+                f"attached our Springing DACA template for you and your lender to review. As a "
+                f"heads-up, we typically don't accept redlines or edits to this standard template. "
+                f"Once everyone has reviewed it and is comfortable with the terms, we can move things "
+                f"along.\n\nAfter we receive confirmation that all parties are aligned, we'll send the "
+                f"agreement via DocuSign for execution. Once it's signed, we'll set up the account.\n\n"
+                f"If any questions come up, feel free to reach out.{best}")
+    if email_type == "docusign_sent":  # SOP DocuSign Sent macro
+        return (f"{hello}\n\nThe DACA agreement has been sent via DocuSign from Rho Client Service "
+                f"(contracts@docusign.rho.co). It will first route to the Borrower for signature, then "
+                f"automatically to the Lender. Following the lender's signature, the agreement is "
+                f"countersigned by Rho and then by our banking partner, Webster Bank — Webster is the "
+                f"final signer, with a standard countersign time of 2–5 business days once received.\n\n"
+                f"As soon as the fully executed agreement is back, we'll distribute it to all parties "
+                f"and confirm the DACA account is operational.\n\nPlease let me know if you have any "
+                f"questions.{sincerely}")
+    if email_type == "execution_complete":  # SOP final distribution macro
+        return (f"{hello}\n\nWe're pleased to confirm that the Deposit Account Control Agreement (DACA) "
+                f"for {entity} has been fully signed by all parties. Attached is a copy of the fully "
+                f"signed agreement for your records.\n\nThe DACA is now in effect with respect to the "
+                f"account(s) identified in Schedule A. Unless and until a trigger event occurs pursuant "
+                f"to the agreement, {entity} will continue to retain control of the account(s).\n\nThank "
+                f"you for your cooperation throughout this process — please reach out to daca@rho.co "
+                f"with any further questions.{sincerely}")
     if email_type == "status_update":
-        return (f"{hi}\n\nWanted to give you a quick status update on your DACA. It's currently at "
-                f"the '{ctx['stage']}' stage and we're actively working it. I'll follow up as soon "
-                f"as there's a next step for you.{sign}")
-    # follow_up / default
-    return (f"{hi}\n\nFollowing up on your DACA to make sure nothing is blocked on our side. "
-            f"Let me know if you have any questions — happy to help.{sign}")
+        return (f"{hi}\n\nA quick status update on your DACA: it's currently at the '{ctx['stage']}' "
+                f"stage and we're actively working it. I'll follow up as soon as there's a next step "
+                f"for you.{best}")
+    return (f"{hi}\n\nFollowing up on your DACA to make sure nothing is blocked on our side. Let me "
+            f"know if you have any questions — happy to help.{best}")
 
 
 def _ai_polish(email_type: str, template: str, ctx: dict, rep_name: str) -> str | None:
@@ -83,8 +116,8 @@ def _ai_polish(email_type: str, template: str, ctx: dict, rep_name: str) -> str 
         return None
     try:
         import anthropic
-        instr = (_NEW_INQUIRY_INSTRUCTION if email_type == "new_inquiry"
-                 else EMAIL_TYPE_INSTRUCTIONS.get(email_type, EMAIL_TYPE_INSTRUCTIONS["follow_up"]))
+        instr = _INSTRUCTIONS.get(email_type) or EMAIL_TYPE_INSTRUCTIONS.get(
+            email_type, "Write a brief, professional follow-up grounded in the case.")
         user = (f"Case: {ctx['entity']} · stage {ctx['stage']}"
                 + (f" · lender {ctx['lender']}" if ctx['lender'] else "")
                 + (f"\nInbound from client: {ctx['note']}" if ctx['note'] else "")

@@ -49,6 +49,7 @@ from src.reports import webster_monthly as wm
 from src.register.sync_service import run_sync, build_sources_from_env, last_sync_runs
 from src.webapp.humanize import humanize_flag, SEV_ORDER
 from src.webapp.draft_reply import draft_reply, TYPES as DRAFT_TYPES
+from src.guide.playbook import guide_for, off_note_for
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = os.environ.get(
@@ -317,7 +318,42 @@ async def case_detail(request: Request, case_id: str, draft_type: str = ""):
             "zendesk": comms.get("agent_url") if comms.get("configured") else None,
         },
         "all_stages": ALL_STAGES,
+        "guide": guide_for(c.lifecycle_stage), "off_note": off_note_for(c.lifecycle_stage),
     })
+
+
+@app.post("/case/{case_id}/create-ticket")
+def create_ticket(case_id: str):
+    """Create the DACA Jira ticket for this case (SOP Step 3), set fraud_review, and
+    write the key back onto the case. Human-gated: fired only by the operator's click."""
+    r = reg()
+    c = r.get_case(case_id)
+    if not c:
+        return HTMLResponse("case not found", status_code=404)
+    ts = now_iso()
+    try:
+        from src.register.clients.jira_client import JiraClient
+        jc = JiraClient()
+        if not jc.configured():
+            r.append_event(case_id, ts, OPERATOR, "note",
+                           new_value="Create-ticket attempted but Jira isn't configured "
+                                     "(set JIRA_EMAIL/JIRA_API_TOKEN). Create it in the portal for now.",
+                           idempotency_key=f"noticket:{case_id}:{ts}")
+            return RedirectResponse(url=f"/case/{case_id}", status_code=303)
+        summary = f"{c.business_id + ' - ' if c.business_id else ''}{c.entity_legal_name} | DACA Request"
+        note = next((e["new_value"] for e in r.events_for(case_id)
+                     if e.get("event_type") == "note" and e.get("new_value")), "")
+        res = jc.create_daca_ticket(summary, f"DACA request for {c.entity_legal_name}.\n\n{note}")
+        upd = Case(case_id=case_id, entity_legal_name=c.entity_legal_name,
+                   lifecycle_stage=LifecycleStage.FRAUD_REVIEW.value, jira_key=res["key"])
+        r.upsert_case(upd, actor=OPERATOR, ts=ts, evidence_link=res["url"])
+        r.append_event(case_id, ts, OPERATOR, "ticket_created", field="jira_key",
+                       new_value=res["key"], evidence_link=res["url"],
+                       idempotency_key=f"ticket:{case_id}:{res['key']}")
+    except Exception as e:
+        r.append_event(case_id, ts, OPERATOR, "note", new_value=f"Create-ticket failed: {e}",
+                       idempotency_key=f"ticketerr:{case_id}:{ts}")
+    return RedirectResponse(url=f"/case/{case_id}", status_code=303)
 
 
 @app.post("/case/{case_id}/resolve")

@@ -29,6 +29,27 @@ class JiraClient:
     def configured(self) -> bool:
         return bool(self.email and self.api_token)
 
+    def create_daca_ticket(self, summary: str, description: str,
+                           project_key: str = "CSHELP", issue_type: str = "DACA Request") -> dict:
+        """Create a DACA Request ticket (per the SOP: first status → Fraud Initial Review,
+        DACA DRI tags Fraud). Requires a token with write scope. Returns {key, url}.
+        Human-gated: only called from an explicit operator action, never automatically."""
+        if not self.configured():
+            raise RuntimeError("Jira not configured: set JIRA_EMAIL and JIRA_API_TOKEN.")
+        import httpx
+        payload = {"fields": {
+            "project": {"key": project_key},
+            "issuetype": {"name": issue_type},
+            "summary": summary,
+            "description": description,
+        }}
+        with httpx.Client(timeout=60, auth=(self.email, self.api_token),
+                          headers={"Accept": "application/json"}) as c:
+            r = c.post(f"{self.base_url}/rest/api/3/issue", json=payload)
+            r.raise_for_status()
+            key = r.json().get("key", "")
+        return {"key": key, "url": f"https://rho.atlassian.net/browse/{key}"}
+
     def fetch(self) -> list[dict]:
         if not self.configured():
             raise RuntimeError("Jira not configured: set JIRA_EMAIL and JIRA_API_TOKEN.")

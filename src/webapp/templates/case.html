@@ -69,6 +69,39 @@
   {% endif %}
 </div>
 
+<!-- Guided next step (R11) — from the Rho DACA Process SOP -->
+{% if guide %}
+<div class="card" style="margin-bottom:var(--sp-4);border-left:4px solid var(--accent);">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;">
+    <h3 style="margin:0;">Guided next step <span class="muted small">· Phase {{ guide.phase }}</span></h3>
+    <a class="ext small" href="https://app.notion.com/p/245db9eba4f0800c816ccb5a02133f81" target="_blank" rel="noopener">Rho DACA Process (SOP) ↗</a>
+  </div>
+  <p class="small muted" style="margin:4px 0 10px;">Owner: {{ guide.who }}</p>
+  <ul style="margin:0 0 10px;padding-left:18px;">
+    {% for step in guide.do %}<li style="margin-bottom:5px;">{{ step }}</li>{% endfor %}
+  </ul>
+  <div class="small" style="display:flex;gap:var(--sp-5);flex-wrap:wrap;margin-bottom:10px;">
+    {% if guide.docs %}<div><strong>Docs:</strong> {{ guide.docs|join(', ') }}</div>{% endif %}
+    {% if guide.contacts %}<div><strong>Contacts:</strong> {{ guide.contacts|join(', ') }}</div>{% endif %}
+  </div>
+  <div class="small" style="background:var(--ok-bg);color:var(--ok-ink);padding:8px 12px;border-radius:var(--radius-sm);margin-bottom:12px;">
+    ✓ Advances to next when: {{ guide.done }}
+  </div>
+  <div style="display:flex;gap:var(--sp-3);flex-wrap:wrap;align-items:center;">
+    {% if guide.macro %}<a class="btn" href="/case/{{ c.case_id }}?draft_type={{ guide.macro }}">✉ Draft the email</a>{% endif %}
+    {% if guide.primary_action == 'create_ticket' %}
+      <form method="post" action="/case/{{ c.case_id }}/create-ticket" style="margin:0;">
+        <button class="btn" type="submit">＋ Create DACA Jira ticket</button></form>
+    {% endif %}
+    {% for label,url in guide.links %}<a class="btn secondary" href="{{ url }}" target="_blank" rel="noopener">{{ label }} ↗</a>{% endfor %}
+  </div>
+</div>
+{% elif off_note %}
+<div class="card" style="margin-bottom:var(--sp-4);">
+  <h3 style="margin:0 0 6px;">Status</h3><p class="small muted" style="margin:0;">{{ off_note }}</p>
+</div>
+{% endif %}
+
 <!-- Client comms (Zendesk) -->
 <div class="card" style="margin-bottom:var(--sp-4);">
   <h3 style="margin:0 0 10px;">Client comms <span class="muted" style="font-weight:400;font-size:12px;">(Zendesk)</span></h3>
