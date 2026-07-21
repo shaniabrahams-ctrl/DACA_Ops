@@ -161,6 +161,40 @@
   details.book > summary::-webkit-details-marker { display:none; }
   details.book > summary::before { content:"▸ "; color:var(--muted); }
   details.book[open] > summary::before { content:"▾ "; }
+
+  /* action queue */
+  .action { display:flex; gap:var(--sp-3); align-items:flex-start; padding:12px var(--sp-5);
+    border-top:1px solid var(--line); }
+  .action:first-child { border-top:0; }
+  .action .sev { width:8px; height:8px; border-radius:50%; margin-top:6px; flex:0 0 auto;
+    background:var(--mist-300); }
+  .action.high .sev { background:#D64545; }
+  .action.med .sev { background:#E0A100; }
+  .action.low .sev { background:var(--mist-300); }
+  .action .who { min-width:0; }
+  .action .title { font-weight:600; }
+  .action .do { color:var(--muted); font-size:13px; margin-top:1px; }
+  .action .meta { margin-left:auto; text-align:right; white-space:nowrap; padding-left:var(--sp-4); }
+
+  /* kanban */
+  .kanban { display:flex; gap:var(--sp-4); overflow-x:auto; padding-bottom:6px; align-items:flex-start; }
+  .kcol { flex:0 0 288px; background:var(--surface-2); border:1px solid var(--line);
+    border-radius:var(--radius); padding:10px; }
+  .kcol > h3 { display:flex; align-items:center; justify-content:space-between; margin:2px 4px 10px;
+    font-size:13px; }
+  .kcard { display:block; background:var(--surface); border:1px solid var(--line);
+    border-radius:var(--radius-sm); padding:11px 12px; margin-bottom:8px; text-decoration:none;
+    color:inherit; box-shadow:var(--shadow); border-left:3px solid var(--line); transition:border-color .15s; }
+  .kcard:hover { border-color:var(--mist-300); }
+  .kcard.age-red { border-left-color:#D64545; }
+  .kcard.age-amber { border-left-color:#E0A100; }
+  .kcard.age-ok { border-left-color:var(--accent); }
+  .kcard .kt { font-weight:600; line-height:1.25; }
+  .kcard .km { color:var(--muted); font-size:12px; margin-top:3px; }
+  .age-pill { font-size:11px; font-weight:600; padding:1px 7px; border-radius:999px; }
+  .age-pill.age-red { background:#FBE3E3; color:#9B2C2C; }
+  .age-pill.age-amber { background:#FBEFD3; color:#7A5B18; }
+  .age-pill.age-ok { background:var(--surface-2); color:var(--muted); }
 </style>
 </head>
 <body>

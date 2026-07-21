@@ -47,6 +47,7 @@ from src.register.lifecycle import (
 from src.register.pipeline import STAGE_ORDER, OFF_PIPELINE, STALE_DAYS, _days_since
 from src.reports import webster_monthly as wm
 from src.register.sync_service import run_sync, build_sources_from_env, last_sync_runs
+from src.webapp.humanize import humanize_flag, SEV_ORDER
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = os.environ.get(
@@ -92,6 +93,16 @@ ALL_STAGES = [(s.value, label) for s, label in STAGE_ORDER] + \
 INFLIGHT_STAGES = [(s, label) for s, label in STAGE_ORDER if s != LifecycleStage.ACTIVE]
 
 
+def _aging(days: int | None) -> str:
+    if days is None:
+        return "none"
+    if days > STALE_DAYS:
+        return "red"
+    if days > 14:
+        return "amber"
+    return "ok"
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     r = reg()
@@ -103,23 +114,18 @@ def dashboard(request: Request):
 
     def card(c):
         d = _days_since(c.stage_entered_at, now)
-        return {"case": c, "days": d, "stale": d is not None and d > STALE_DAYS}
+        return {"case": c, "days": d, "stale": d is not None and d > STALE_DAYS,
+                "aging": _aging(d)}
 
-    # Visual pipeline funnel — every lifecycle stage with its count.
-    funnel = [{"label": label, "stage": s.value,
-               "count": len(by_stage.get(s.value, [])),
-               "is_active": s == LifecycleStage.ACTIVE}
-              for s, label in STAGE_ORDER]
-
-    # In-flight work queue — only the stages that need movement (not Active).
+    # Kanban board — one column per in-flight stage (the work that needs movement).
     inflight_cols = []
     for s, label in INFLIGHT_STAGES:
         group = by_stage.get(s.value, [])
         if group:
-            cards = [card(c) for c in sorted(group, key=lambda x: x.stage_entered_at or "")]
+            cards = [card(c) for c in sorted(group, key=lambda x: -( _days_since(x.stage_entered_at, now) or 0))]
             inflight_cols.append({"stage": s.value, "label": label, "cards": cards})
 
-    # Active book — compact, not the whole page.
+    # Active book — compact, collapsed (progressive disclosure).
     active_cases = sorted(by_stage.get(LifecycleStage.ACTIVE.value, []),
                           key=lambda c: c.entity_legal_name.lower())
     active_rows = [card(c) for c in active_cases]
@@ -130,15 +136,48 @@ def dashboard(request: Request):
         if group:
             off.append({"label": label, "cases": group, "stage": stage.value})
 
-    flagged = [c for c in cases if c.flags]
+    # Action queue — plain-English, prioritized. Data-quality flags (humanized) plus
+    # aging in-flight cases that carry no flag. This replaces the raw "flag" column.
+    stage_label = {s.value: label for s, label in STAGE_ORDER}
+    stage_label.update({s.value: label for s, label in OFF_PIPELINE})
+    actions = []
+    for c in cases:
+        for f in c.flags:
+            h = humanize_flag(f)
+            actions.append({"case": c, **h})
+    flagged_ids = {c.case_id for c in cases if c.flags}
+    for col in inflight_cols:
+        for cd in col["cards"]:
+            if cd["stale"] and cd["case"].case_id not in flagged_ids:
+                actions.append({
+                    "case": cd["case"], "severity": "med",
+                    "title": f"Aging — {cd['days']} days in {stage_label.get(cd['case'].lifecycle_stage, 'stage')}",
+                    "action": "Follow up to move it forward.", "detail": ""})
+    actions.sort(key=lambda a: SEV_ORDER.get(a["severity"], 3))
+
     in_flight = sum(len(col["cards"]) for col in inflight_cols)
+    at_risk = sum(1 for col in inflight_cols for cd in col["cards"] if cd["stale"])
+    last_synced = max((c.last_synced_at for c in cases if c.last_synced_at), default=None)
 
     return templates.TemplateResponse(request=request, name="board.html", context={
-        "funnel": funnel, "inflight_cols": inflight_cols,
-        "active_rows": active_rows, "off": off, "flagged": flagged,
+        "inflight_cols": inflight_cols, "active_rows": active_rows, "off": off,
+        "actions": actions,
         "total": len(cases), "active": len(active_cases), "in_flight": in_flight,
+        "at_risk": at_risk,
+        "last_synced": (last_synced or "")[:16].replace("T", " "),
         "generated": now.strftime("%Y-%m-%d %H:%M UTC"),
     })
+
+
+@app.post("/refresh")
+def refresh(request: Request):
+    """Dashboard 'Refresh' — pull live sources and return to the board.
+    A no-op locally until source creds are set; live on Rhollout."""
+    try:
+        run_sync(reg(), build_sources_from_env(), now_iso())
+    except Exception:
+        pass  # surfaced on the Sync page; never break the dashboard
+    return RedirectResponse(url="/", status_code=303)
 
 
 @app.get("/case/{case_id}", response_class=HTMLResponse)
