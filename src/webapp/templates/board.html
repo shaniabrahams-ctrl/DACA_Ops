@@ -26,8 +26,15 @@
         <span class="muted small"> · {% if c.initial_inquiry_date %}in since {{ c.initial_inquiry_date }}{% else %}new{% endif %}</span>
         <div class="muted small">Needs triage — confirm borrower entity + lender, then open the Jira ticket / send the application.</div>
       </div>
-      <div class="small" style="text-align:right;">
-        {% if jira_url(key) %}<a class="ext" href="{{ jira_url(key) }}" target="_blank" rel="noopener">{{ key }} ↗</a>{% else %}<span class="muted">no Jira yet</span>{% endif %}
+      <div class="small" style="text-align:right;display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+        {% if jira_url(key) %}
+          <a class="ext" href="{{ jira_url(key) }}" target="_blank" rel="noopener">{{ key }} ↗</a>
+        {% else %}
+          <form method="post" action="/case/{{ c.case_id }}/create-ticket" style="margin:0;">
+            <button class="btn" type="submit">＋ Create Jira ticket</button>
+          </form>
+          <span class="muted" style="font-size:11px;">creates the ticket &amp; updates the tracker</span>
+        {% endif %}
       </div>
     </div>
     {% endfor %}

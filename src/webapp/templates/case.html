@@ -89,9 +89,9 @@
   </div>
   <div style="display:flex;gap:var(--sp-3);flex-wrap:wrap;align-items:center;">
     {% if guide.macro %}<a class="btn" href="/case/{{ c.case_id }}?draft_type={{ guide.macro }}">✉ Draft the email</a>{% endif %}
-    {% if guide.primary_action == 'create_ticket' %}
+    {% if not c.jira_key %}
       <form method="post" action="/case/{{ c.case_id }}/create-ticket" style="margin:0;">
-        <button class="btn" type="submit">＋ Create DACA Jira ticket</button></form>
+        <button class="btn" type="submit">＋ Create DACA Jira ticket &amp; update tracker</button></form>
     {% endif %}
     {% for label,url in guide.links %}<a class="btn secondary" href="{{ url }}" target="_blank" rel="noopener">{{ label }} ↗</a>{% endfor %}
   </div>
