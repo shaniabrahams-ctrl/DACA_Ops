@@ -180,8 +180,40 @@ def refresh(request: Request):
     return RedirectResponse(url="/", status_code=303)
 
 
+ZENDESK_ENV = ("ZENDESK_SUBDOMAIN", "ZENDESK_EMAIL", "ZENDESK_API_TOKEN")
+
+
+def zendesk_configured() -> bool:
+    return all(os.environ.get(k) for k in ZENDESK_ENV)
+
+
+async def load_comms(case: Case, parties: list[dict]) -> dict:
+    """Load the client's Zendesk ticket thread + macros for the comms panel.
+    Live lookup (view-don't-store); degrades to a 'not connected' state when
+    creds are absent, and never lets a Zendesk outage break the case page."""
+    if not zendesk_configured():
+        return {"configured": False, "thread": None, "macros": []}
+    try:
+        import httpx
+        from src.integrations.zendesk_client import ZendeskClient
+        email = next((p.get("email") for p in parties
+                      if p.get("role") == "borrower_contact" and p.get("email")), None)
+        async with httpx.AsyncClient(timeout=30) as http:
+            zc = ZendeskClient(http_client=http)
+            ticket = await zc.find_ticket_for_client(case.entity_legal_name, email)
+            thread = await zc.get_ticket_with_thread(ticket.id) if ticket else None
+            macros = await zc.list_macros()
+        agent_url = None
+        if thread:
+            agent_url = (f"https://{os.environ['ZENDESK_SUBDOMAIN']}.zendesk.com"
+                         f"/agent/tickets/{thread.ticket.id}")
+        return {"configured": True, "thread": thread, "macros": macros, "agent_url": agent_url}
+    except Exception as e:
+        return {"configured": True, "thread": None, "macros": [], "error": str(e)}
+
+
 @app.get("/case/{case_id}", response_class=HTMLResponse)
-def case_detail(request: Request, case_id: str):
+async def case_detail(request: Request, case_id: str):
     r = reg()
     c = r.get_case(case_id)
     if not c:
@@ -189,6 +221,7 @@ def case_detail(request: Request, case_id: str):
     now = datetime.now(timezone.utc)
     events = list(reversed(r.events_for(case_id)))  # newest first
     parties = r.parties_for(case_id)
+    comms = await load_comms(c, parties)
 
     # legal next stages this case may move to (typed transition rules)
     cur = LifecycleStage(c.lifecycle_stage)
@@ -215,7 +248,34 @@ def case_detail(request: Request, case_id: str):
         "stage_label": STAGE_LABELS.get(c.lifecycle_stage, c.lifecycle_stage),
         "days": _days_since(c.stage_entered_at, now),
         "next_stages": next_stages, "stepper": stepper, "off_pipeline": off_pipeline,
+        "comms": comms, "zendesk_env": ZENDESK_ENV,
+        "flag_items": [humanize_flag(f) for f in c.flags],
     })
+
+
+@app.post("/case/{case_id}/reply")
+async def send_client_reply(case_id: str, ticket_id: str = Form(...),
+                            body: str = Form(...), public: str = Form("true")):
+    """Send a client-facing reply on the case's Zendesk ticket. The human gate:
+    the logged-in operator wrote/approved the text and clicked send, so it goes out
+    as approved_by=OPERATOR via the sanctioned send_reply() path — never auto-sent."""
+    if not (zendesk_configured() and body.strip()):
+        return RedirectResponse(url=f"/case/{case_id}", status_code=303)
+    import httpx
+    from src.integrations.zendesk_client import ZendeskClient
+    from src.agents.client_comms_agent import send_reply
+    ts = now_iso()
+    is_public = public == "true"
+    async with httpx.AsyncClient(timeout=30) as http:
+        zc = ZendeskClient(http_client=http)
+        receipt = await send_reply(zc, ticket_id, body.strip(), approved_by=OPERATOR, public=is_public)
+    reg().append_event(
+        case_id, ts, OPERATOR, "client_reply_sent", field="zendesk",
+        new_value=f"ticket {ticket_id} · {receipt.action}"
+                  + (f" · {receipt.comment_id}" if receipt.comment_id else ""),
+        evidence_link=f"https://{os.environ['ZENDESK_SUBDOMAIN']}.zendesk.com/agent/tickets/{ticket_id}",
+        idempotency_key=f"reply:{case_id}:{ts}")
+    return RedirectResponse(url=f"/case/{case_id}", status_code=303)
 
 
 @app.post("/case/{case_id}/advance")

@@ -21,10 +21,17 @@
   {% if c.agreement_date %} · Agreement {{ c.agreement_date }}{% endif %}
 </p>
 
-{% if c.flags %}
+{% if flag_items %}
 <div class="card" style="background:var(--flag-bg);border-color:transparent;margin-bottom:var(--sp-4);box-shadow:none;">
   <strong style="color:var(--flag-ink);">Needs attention</strong>
-  <ul style="margin:6px 0 0;padding-left:18px;">{% for f in c.flags %}<li style="color:var(--flag-ink);">{{ f }}</li>{% endfor %}</ul>
+  <ul style="margin:8px 0 0;padding-left:18px;">
+    {% for h in flag_items %}
+    <li style="color:var(--flag-ink);margin-bottom:6px;">
+      {{ h.title }}{% if h.action %} — <span style="opacity:.85;">{{ h.action }}</span>{% endif %}
+      {% if h.detail %}<br><span class="small" style="opacity:.7;">{{ h.detail }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
 </div>
 {% endif %}
 
@@ -41,6 +48,59 @@
     <div class="step {{ s.status }}"><div class="sd"></div><div class="sl">{{ s.label }}</div></div>
     {% endfor %}
   </div>
+</div>
+
+<!-- Client comms (Zendesk) -->
+<div class="card" style="margin-bottom:var(--sp-4);">
+  <h3 style="margin:0 0 10px;">Client comms <span class="muted" style="font-weight:400;font-size:12px;">(Zendesk)</span></h3>
+  {% if not comms.configured %}
+    <p class="muted small" style="margin:0;">Zendesk isn't connected. Set
+      {% for k in zendesk_env %}<code>{{ k }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+      (local <code>.env</code> / Rhollout Secret Manager) to reply to clients from here.</p>
+  {% elif comms.error %}
+    <p class="muted small" style="margin:0;">Couldn't reach Zendesk: {{ comms.error }}</p>
+  {% elif not comms.thread %}
+    <p class="muted small" style="margin:0;">No Zendesk ticket found for this client yet.
+      A ticket appears here once the client writes in to <code>daca@rho.co</code> / the Zendesk queue.</p>
+  {% else %}
+    {% set tk = comms.thread.ticket %}
+    <div class="small muted" style="margin-bottom:10px;">
+      Ticket <strong>#{{ tk.id }}</strong> · {{ tk.status }} · {{ tk.subject }}
+      {% if comms.agent_url %} · <a class="ext" href="{{ comms.agent_url }}" target="_blank" rel="noopener">open in Zendesk ↗</a>{% endif %}
+    </div>
+    <div class="thread">
+      {% for cm in comms.thread.comments %}
+      <div class="bubble {% if not cm.public %}internal{% endif %}">
+        <div class="bh">
+          <span>{{ cm.created_at[:16].replace("T"," ") }}</span>
+          {% if not cm.public %}<span class="tag-internal">internal note</span>{% else %}<span class="muted">public</span>{% endif %}
+        </div>
+        <div class="bb">{{ cm.body }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Reply composer — human writes/approves and sends; never auto-sent -->
+    <form method="post" action="/case/{{ c.case_id }}/reply" style="margin-top:var(--sp-4);">
+      <input type="hidden" name="ticket_id" value="{{ tk.id }}">
+      {% if comms.macros %}
+      <label for="macro">Insert a template</label>
+      <select id="macro" onchange="var t=document.getElementById('replybody'); if(this.value){t.value=this.value;} this.selectedIndex=0;">
+        <option value="">— macro —</option>
+        {% for m in comms.macros %}<option value="{{ m.comment_text }}">{{ m.title }}</option>{% endfor %}
+      </select>
+      {% endif %}
+      <label for="replybody">Reply to client</label>
+      <textarea id="replybody" name="body" rows="4" placeholder="Write the reply the client will see…"></textarea>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:6px;font-weight:500;margin:0;">
+          <input type="checkbox" name="public" value="true" checked style="width:auto;"> Visible to client
+        </label>
+        <button class="btn" type="submit">Send reply</button>
+        <span class="muted small">Reviewed and sent by a human, never automatically.</span>
+      </div>
+    </form>
+  {% endif %}
 </div>
 
 <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;">

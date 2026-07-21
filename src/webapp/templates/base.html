@@ -195,6 +195,18 @@
   .age-pill.age-red { background:#FBE3E3; color:#9B2C2C; }
   .age-pill.age-amber { background:#FBEFD3; color:#7A5B18; }
   .age-pill.age-ok { background:var(--surface-2); color:var(--muted); }
+
+  /* client comms thread */
+  .thread { display:flex; flex-direction:column; gap:8px; max-height:420px; overflow-y:auto;
+    padding-right:4px; }
+  .bubble { border:1px solid var(--line); border-radius:var(--radius-sm); padding:9px 12px;
+    background:var(--surface); }
+  .bubble.internal { background:var(--warn-bg); border-color:transparent; }
+  .bubble .bh { font-size:12px; color:var(--muted); margin-bottom:4px; display:flex;
+    justify-content:space-between; gap:8px; align-items:center; }
+  .bubble .bb { white-space:pre-wrap; font-size:13.5px; line-height:1.5; }
+  .tag-internal { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--warn-ink); }
 </style>
 </head>
 <body>
