@@ -199,10 +199,10 @@ credentials; do not try to call MCP from the FastAPI process.
   be kept in lockstep, add a separate low-priority "SF out of date" hygiene view.
 - **LEGALHELP API access** — request read scope for the LEGALHELP Jira project if
   live legal-ticket status is wanted (currently key/URL link only).
-- **`docs/prefilled_dacas/*.docx` still contain real signer PII in git history**
-  (from before the security skill) — the git-history cleanup decision is still open
-  (see the daca-data-security skill's "Known violation" section). Three options
-  given there; needs the DRI's call.
+- **`docs/prefilled_dacas/*.docx` contain real signer PII in git history** — **RESOLVED
+  2026-07-21: DRI accepted (Option 3)**, files stay in git as an access-controlled
+  artifact (see the daca-data-security skill's decision note). Not an open item. NEW
+  prefilled DACAs still follow view-don't-store (write to Drive/scratch, don't commit).
 - **Rhollout not yet provisioned** — the app runs locally only until then.
 - **requirements.txt** will need `reportlab`, `openpyxl` (R7) and real source-client
   libs (R12) added.

@@ -45,11 +45,21 @@ This is not a new idea invented for DACA Ops — it is Rho's stated position for
 
 **"View, don't store" in this codebase today:** `CaseContextLoader.load()` (`src/context/loader.py`) already does this correctly for the read path — it fetches fresh from Gmail/Jira/Drive/Typeform into an in-memory `CaseRecord` on every call, and nothing in that module writes case content to disk. Keep new code on that same shape: build the record fresh, don't add a cache/database table that outlives the request without deliberately deciding what classification tier it needs (see table above).
 
-## Known violation in this repo — needs your decision
+## Known PII in this repo — DECISION RECORDED (2026-07-21): Accept (Option 3)
 
-`docs/prefilled_dacas/Rho_Springing_DACA_Anonos_Innovations_LLC_PREFILL.docx` and the Technologies equivalent are **committed to git** (`claude/nifty-darwin-rle1pt`, commit `03625b1`) and contain real signatory names, emails, and addresses (Joseph Sciascia, Michael Gulliford, etc.). This is exactly the pattern this skill exists to prevent — a persistent, unmasked copy of client PII living in app storage (git) rather than being generated on demand and reviewed transiently.
+**Decision:** The DRI (Shani Abrahams) elected **Option 3 — accept the current state**.
+The prefilled-DACA files stay in git as-is; no removal, masking, or history rewrite.
+Basis: the repo/branch is treated as an internal, access-controlled artifact. This is
+the explicit, recorded decision Option 3 requires — not a default. (One standing
+caveat: Option 3 presumes Legal is comfortable with client PII in git; if that hasn't
+been confirmed with Legal, do so — it does not change the recorded decision, only
+validates its precondition.) Future sessions: do not re-flag this as an open item.
 
-This needs your call, not a silent fix, because removing it cleanly means rewriting git history (a `git filter-repo`/`BFG` pass) if the branch has already been shared or pushed anywhere reviewers might have pulled it — not just deleting the file in a new commit (that leaves it recoverable from history). Options, in order of preference:
+For the record, the situation being accepted:
+
+`docs/prefilled_dacas/Rho_Springing_DACA_Anonos_Innovations_LLC_PREFILL.docx` and the Technologies equivalent are **committed to git** (`claude/nifty-darwin-rle1pt`, commit `03625b1`) and contain real signatory names, emails, and addresses (Joseph Sciascia, Michael Gulliford, etc.). This is the pattern this skill otherwise exists to prevent — a persistent, unmasked copy of client PII in git rather than generated on demand and reviewed transiently. Going forward, NEW prefilled DACAs should still follow the view-don't-store rule (write to Drive/scratch, don't commit); this acceptance covers the two files already committed, not a license to commit more.
+
+The options that were considered (removing cleanly would mean a `git filter-repo`/`BFG` history rewrite, since the branch is already pushed):
 1. **Remove from git entirely, keep pre-fill outputs Drive-only** — pre-fill agents write to a scratch/temp path for human review, never commit the filled document; only the *template* (already sanitized, no client data) stays in git. Requires a history rewrite for the two files already committed.
 2. **Keep committing pre-filled drafts, but redact/mask PII in the git copy** — replace names/emails/addresses with placeholders in what's committed, keep the real filled version only in Drive after DRI approval. More code, but preserves an audit trail in git without the PII.
 3. **Accept the current state** if this branch/repo is already scoped as an internal, access-controlled audit trail and Legal is fine with it being in git — but that should be an explicit decision, not a default.
