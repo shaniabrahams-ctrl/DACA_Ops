@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ c.entity_legal_name }} — DACA Ops{% endblock %}
+{% block nav_pipeline %}active{% endblock %}
 {% block body %}
-<a href="/" class="muted" style="text-decoration:none;">← Pipeline</a>
+<a href="/" class="muted small" style="text-decoration:none;">← Pipeline</a>
 <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:6px;">
   <h1 style="margin:0;">{{ c.entity_legal_name }}</h1>
   <div>
@@ -19,9 +20,9 @@
 </p>
 
 {% if c.flags %}
-<div class="card" style="background:var(--flag-bg);border-color:transparent;margin-bottom:14px;">
-  <strong style="color:var(--flag-ink);">🚩 Flags</strong>
-  <ul style="margin:6px 0 0;">{% for f in c.flags %}<li style="color:var(--flag-ink);">{{ f }}</li>{% endfor %}</ul>
+<div class="card" style="background:var(--flag-bg);border-color:transparent;margin-bottom:var(--sp-4);box-shadow:none;">
+  <strong style="color:var(--flag-ink);">Needs attention</strong>
+  <ul style="margin:6px 0 0;padding-left:18px;">{% for f in c.flags %}<li style="color:var(--flag-ink);">{{ f }}</li>{% endfor %}</ul>
 </div>
 {% endif %}
 

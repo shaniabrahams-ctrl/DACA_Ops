@@ -5,52 +5,118 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}DACA Ops{% endblock %}</title>
 <style>
+  /* ---- Rho design tokens (Brand Guidelines V3.2 + LLM Style Guide) ----
+     Palette: white + black + Caribbean teal as the third hero color, teal used
+     sparingly and intentionally. Sentence case, left-aligned, generous white
+     space, soft shadows, 8px radii, 200ms transitions. */
   :root {
-    --bg: #f6f7f9; --card: #fff; --ink: #1a1d24; --muted: #6b7280;
-    --line: #e5e7eb; --accent: #2f6feb; --accent-ink:#fff;
-    --warn-bg:#fef3c7; --warn-ink:#92400e; --flag-bg:#fee2e2; --flag-ink:#991b1b;
-    --ok-bg:#dcfce7; --ok-ink:#166534;
+    --moon-0:#FFFFFF; --moon-50:#F6F8F8; --moon-100:#F2F4F4;
+    --abyss-900:#000000; --abyss-800:#0E1111; --abyss-700:#3A3C3B;
+    --abyss-500:#667070; --abyss-400:#878D8C;
+    --carib-100:#CDFBF2; --carib-200:#9CF7E6; --carib-500:#07EBC0; --carib-800:#035E4D;
+    --mist-100:#D9E4E5; --mist-300:#81A5A9;
+
+    --bg:var(--moon-50); --surface:var(--moon-0); --surface-2:var(--moon-100);
+    --ink:#151716; --muted:var(--abyss-500); --line:var(--mist-100);
+    --accent:var(--carib-500); --accent-ink:#0E1111;
+    --ring:rgba(7,235,192,.45);
+    --ok-bg:var(--carib-100); --ok-ink:var(--carib-800);
+    --warn-bg:#FBEFD3; --warn-ink:#7A5B18;
+    --flag-bg:#FBE3E3; --flag-ink:#9B2C2C;
+    --shadow:0 1px 2px rgba(16,17,17,.04), 0 4px 16px rgba(16,17,17,.06);
+    --radius:12px; --radius-sm:8px;
+    --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px; --sp-6:32px; --sp-8:48px;
+    --font: 'Basier Circle', Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#0f1115; --card:#171a21; --ink:#e6e8ec; --muted:#9aa3af;
-      --line:#272b33; --accent:#4b82f0; --warn-bg:#3a2f0b; --warn-ink:#fcd34d;
-      --flag-bg:#3a1414; --flag-ink:#fca5a5; --ok-bg:#0f2e1a; --ok-ink:#86efac; }
+    :root {
+      --bg:var(--abyss-800); --surface:#151817; --surface-2:#1b1f1e;
+      --ink:var(--moon-100); --muted:#AFBCBC; --line:#2a2e2d;
+      --accent:var(--carib-500); --accent-ink:#0E1111;
+      --ok-bg:#06342b; --ok-ink:var(--carib-200);
+      --warn-bg:#3a2f12; --warn-ink:#F3D18B;
+      --flag-bg:#3a1a1a; --flag-ink:#F6B4B4;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.35);
+    }
   }
-  * { box-sizing: border-box; }
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
   body { margin:0; background:var(--bg); color:var(--ink);
-    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
-  header { background:var(--card); border-bottom:1px solid var(--line);
-    padding:12px 20px; display:flex; align-items:center; gap:20px; position:sticky; top:0; z-index:5; }
-  header .brand { font-weight:700; font-size:16px; }
-  header a { color:var(--ink); text-decoration:none; }
-  header nav a { color:var(--muted); margin-right:16px; font-weight:500; }
-  header nav a:hover { color:var(--accent); }
-  .btn { display:inline-block; background:var(--accent); color:var(--accent-ink);
-    padding:8px 14px; border-radius:7px; border:0; font-weight:600; cursor:pointer;
-    text-decoration:none; font-size:13px; }
-  .btn.secondary { background:transparent; color:var(--accent); border:1px solid var(--accent); }
-  main { padding:20px; max-width:1400px; margin:0 auto; }
+    font-family:var(--font); font-size:15px; line-height:1.5;
+    -webkit-font-smoothing:antialiased; }
+  a { color:inherit; }
+  h1 { font-size:26px; font-weight:650; letter-spacing:-.01em; line-height:1.1; margin:0; }
+  h2 { font-size:16px; font-weight:600; letter-spacing:-.005em; margin:0 0 var(--sp-3); }
+  h3 { font-size:14px; font-weight:600; margin:0 0 var(--sp-3); }
   .muted { color:var(--muted); }
-  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px;
-    font-weight:600; background:var(--line); color:var(--muted); }
-  .pill.warn { background:var(--warn-bg); color:var(--warn-ink); }
-  .pill.flag { background:var(--flag-bg); color:var(--flag-ink); }
-  .pill.ok { background:var(--ok-bg); color:var(--ok-ink); }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; }
-  input, select, textarea { width:100%; padding:9px 10px; border:1px solid var(--line);
-    border-radius:7px; background:var(--bg); color:var(--ink); font:inherit; }
-  label { display:block; font-weight:600; margin:12px 0 4px; font-size:13px; }
+  .small { font-size:13px; }
+
+  /* header */
+  header { background:var(--surface); border-bottom:1px solid var(--line);
+    padding:0 var(--sp-5); height:60px; display:flex; align-items:center; gap:var(--sp-6);
+    position:sticky; top:0; z-index:10; }
+  .brand { font-weight:700; font-size:16px; letter-spacing:-.01em; text-decoration:none;
+    display:flex; align-items:center; gap:var(--sp-2); }
+  .brand .dot { width:10px; height:10px; border-radius:50%; background:var(--accent);
+    box-shadow:0 0 0 3px var(--ok-bg); }
+  nav { display:flex; gap:var(--sp-5); }
+  nav a { color:var(--muted); text-decoration:none; font-weight:500; font-size:14px;
+    padding:4px 0; border-bottom:2px solid transparent; transition:color .2s, border-color .2s; }
+  nav a:hover { color:var(--ink); }
+  nav a.active { color:var(--ink); border-bottom-color:var(--accent); }
+
+  main { padding:var(--sp-6) var(--sp-5); max-width:1360px; margin:0 auto; }
+
+  /* buttons — Abyss fill, teal hover, 8px radius, 200ms */
+  .btn { display:inline-flex; align-items:center; gap:6px; background:var(--ink);
+    color:var(--moon-0); border:1px solid var(--ink); padding:9px 16px;
+    border-radius:var(--radius-sm); font:inherit; font-weight:600; font-size:14px;
+    cursor:pointer; text-decoration:none; transition:background .2s, color .2s, border-color .2s, transform .05s; }
+  .btn:hover { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .btn:active { transform:translateY(1px); }
+  .btn.secondary { background:transparent; color:var(--ink); border-color:var(--line); }
+  .btn.secondary:hover { border-color:var(--ink); background:var(--surface-2); color:var(--ink); }
+  :focus-visible { outline:none; box-shadow:0 0 0 3px var(--ring); border-radius:var(--radius-sm); }
+
+  /* cards */
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    padding:var(--sp-5); box-shadow:var(--shadow); }
+  .stack > * + * { margin-top:var(--sp-4); }
+
+  /* pills — teal only for the "good/active" state, used sparingly */
+  .pill { display:inline-flex; align-items:center; gap:4px; padding:2px 9px; border-radius:999px;
+    font-size:12px; font-weight:600; background:var(--surface-2); color:var(--muted);
+    border:1px solid var(--line); white-space:nowrap; }
+  .pill.ok { background:var(--ok-bg); color:var(--ok-ink); border-color:transparent; }
+  .pill.warn { background:var(--warn-bg); color:var(--warn-ink); border-color:transparent; }
+  .pill.flag { background:var(--flag-bg); color:var(--flag-ink); border-color:transparent; }
+
+  /* forms */
+  label { display:block; font-weight:600; font-size:13px; margin:var(--sp-4) 0 var(--sp-1); }
+  input, select, textarea { width:100%; padding:10px 12px; border:1px solid var(--line);
+    border-radius:var(--radius-sm); background:var(--surface); color:var(--ink);
+    font:inherit; font-size:14px; transition:border-color .2s, box-shadow .2s; }
+  input:focus, select:focus, textarea:focus { outline:none; border-color:var(--accent);
+    box-shadow:0 0 0 3px var(--ring); }
+  ::placeholder { color:var(--abyss-400); }
+
+  /* tables */
   table { width:100%; border-collapse:collapse; }
-  td, th { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
-  th { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
+  th { text-align:left; font-size:12px; font-weight:600; color:var(--muted);
+    padding:8px 10px; border-bottom:1px solid var(--line); }
+  td { padding:10px; border-bottom:1px solid var(--line); vertical-align:top; font-size:14px; }
+  tr:last-child td { border-bottom:0; }
+
+  /* empty state */
+  .empty { text-align:center; color:var(--muted); padding:var(--sp-8) var(--sp-4); }
 </style>
 </head>
 <body>
 <header>
-  <a class="brand" href="/">🏦 DACA Ops</a>
+  <a class="brand" href="/"><span class="dot"></span> DACA Ops</a>
   <nav>
-    <a href="/">Pipeline</a>
-    <a href="/intake">+ New DACA Request</a>
+    <a href="/" class="{% block nav_pipeline %}{% endblock %}">Pipeline</a>
+    <a href="/intake" class="{% block nav_intake %}{% endblock %}">New request</a>
   </nav>
 </header>
 <main>{% block body %}{% endblock %}</main>
