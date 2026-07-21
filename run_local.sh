@@ -24,8 +24,11 @@ if [ ! -d .venv ]; then
 fi
 
 if [ ! -f "$DACA_REGISTER_DB" ]; then
-  echo "⚠  No register DB at $DACA_REGISTER_DB — starting with an empty register."
-  echo "   (Drop the daca_register.db the agent sent you next to this script to see your real cases.)"
+  echo "⚠  No register DB at $DACA_REGISTER_DB — starting with an EMPTY register."
+  echo "   You can use it now (add net-new cases via '+ New DACA Request')."
+  echo "   To load the real historical cases, build the register from live snapshots:"
+  echo "       python tools/seed_register.py --jira jira.json --salesforce sf.json"
+  echo "   (see tools/seed_register.py for how to produce those two JSON files)"
 fi
 
 echo "→ DACA Ops running at http://127.0.0.1:${PORT}   (Ctrl+C to stop)"
