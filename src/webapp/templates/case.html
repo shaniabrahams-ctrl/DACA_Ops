@@ -2,7 +2,7 @@
 {% block title %}{{ c.entity_legal_name }} — DACA Ops{% endblock %}
 {% block nav_pipeline %}active{% endblock %}
 {% block body %}
-<a href="/" class="muted small" style="text-decoration:none;">← Pipeline</a>
+<a href="/" class="muted small" style="text-decoration:none;">← Dashboard</a>
 <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:6px;">
   <h1 style="margin:0;">{{ c.entity_legal_name }}</h1>
   <div>
@@ -25,6 +25,21 @@
   <ul style="margin:6px 0 0;padding-left:18px;">{% for f in c.flags %}<li style="color:var(--flag-ink);">{{ f }}</li>{% endfor %}</ul>
 </div>
 {% endif %}
+
+<!-- Stage tracker -->
+<div class="card" style="margin-bottom:var(--sp-4);">
+  <h3 style="margin:0 0 10px;">Stage tracker</h3>
+  {% if off_pipeline %}
+  <p class="small" style="margin:0 0 10px;color:var(--flag-ink);">
+    This case is off the standard pipeline — current status: <strong>{{ stage_label }}</strong>.
+  </p>
+  {% endif %}
+  <div class="stepper">
+    {% for s in stepper %}
+    <div class="step {{ s.status }}"><div class="sd"></div><div class="sl">{{ s.label }}</div></div>
+    {% endfor %}
+  </div>
+</div>
 
 <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;">
   <div>

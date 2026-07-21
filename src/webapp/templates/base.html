@@ -109,16 +109,63 @@
 
   /* empty state */
   .empty { text-align:center; color:var(--muted); padding:var(--sp-8) var(--sp-4); }
+
+  /* KPI tiles */
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:var(--sp-4); }
+  .kpi { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    padding:var(--sp-4) var(--sp-5); box-shadow:var(--shadow); }
+  .kpi .n { font-size:30px; font-weight:680; letter-spacing:-.02em; line-height:1.1; }
+  .kpi .l { color:var(--muted); font-size:13px; font-weight:500; }
+  .kpi.alert { border-color:var(--flag-ink); }
+  .kpi.alert .n { color:var(--flag-ink); }
+
+  /* pipeline funnel — horizontal stage flow with counts */
+  .funnel { display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; }
+  .funnel-step { flex:1 1 0; min-width:104px; text-decoration:none; color:inherit;
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-sm);
+    padding:10px 12px; position:relative; transition:border-color .2s, transform .05s; }
+  .funnel-step:hover { border-color:var(--accent); }
+  .funnel-step .fc { font-size:22px; font-weight:680; letter-spacing:-.02em; }
+  .funnel-step .fl { color:var(--muted); font-size:11.5px; line-height:1.25; margin-top:2px; }
+  .funnel-step.empty0 { opacity:.5; }
+  .funnel-step.term { background:var(--ok-bg); border-color:transparent; }
+  .funnel-step.term .fc { color:var(--ok-ink); }
+
+  /* stage stepper — per-case progress tracker */
+  .stepper { display:flex; gap:4px; overflow-x:auto; padding-bottom:4px; }
+  .step { flex:1 1 0; min-width:92px; text-align:center; padding:8px 6px 10px;
+    border-radius:var(--radius-sm); border:1px solid var(--line); background:var(--surface);
+    position:relative; }
+  .step .sl { font-size:11px; line-height:1.2; color:var(--muted); }
+  .step .sd { width:12px; height:12px; border-radius:50%; margin:0 auto 6px;
+    background:var(--surface-2); border:2px solid var(--line); }
+  .step.done .sd { background:var(--accent); border-color:var(--accent); }
+  .step.done .sl { color:var(--ink); }
+  .step.current { border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); }
+  .step.current .sd { background:var(--accent); border-color:var(--accent);
+    box-shadow:0 0 0 3px var(--ok-bg); }
+  .step.current .sl { color:var(--ink); font-weight:650; }
+  .step.off { opacity:.55; }
+
+  /* work-queue card */
+  .wq-col { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:var(--sp-4); }
+  .wq-card { display:block; text-decoration:none; color:inherit; padding:11px 0;
+    border-top:1px solid var(--line); }
+  .wq-card:first-of-type { border-top:0; }
+  details.book > summary { cursor:pointer; font-weight:600; list-style:none; padding:var(--sp-2) 0; }
+  details.book > summary::-webkit-details-marker { display:none; }
+  details.book > summary::before { content:"▸ "; color:var(--muted); }
+  details.book[open] > summary::before { content:"▾ "; }
 </style>
 </head>
 <body>
 <header>
   <a class="brand" href="/"><span class="dot"></span> DACA Ops</a>
   <nav>
-    <a href="/" class="{% block nav_pipeline %}{% endblock %}">Pipeline</a>
+    <a href="/" class="{% block nav_pipeline %}{% endblock %}">Dashboard</a>
     <a href="/reports/webster" class="{% block nav_reports %}{% endblock %}">Webster report</a>
     <a href="/sync" class="{% block nav_sync %}{% endblock %}">Sync</a>
-    <a href="/intake" class="{% block nav_intake %}{% endblock %}">New request</a>
   </nav>
 </header>
 <main>{% block body %}{% endblock %}</main>

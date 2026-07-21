@@ -1,114 +1,149 @@
 {% extends "base.html" %}
-{% block title %}Pipeline — DACA Ops{% endblock %}
+{% block title %}Dashboard — DACA Ops{% endblock %}
 {% block nav_pipeline %}active{% endblock %}
 {% block body %}
+<div class="stack">
 
-<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:var(--sp-4);flex-wrap:wrap;margin-bottom:var(--sp-5);">
   <div>
-    <h1>Where every DACA is right now</h1>
-    <p class="muted small" style="margin:6px 0 0;">Generated {{ generated }} · from the case register</p>
+    <h1>DACA operations</h1>
+    <p class="muted small" style="margin:6px 0 0;">Live from the case register · generated {{ generated }}</p>
   </div>
-  <a class="btn" href="/intake">+ New request</a>
-</div>
 
-<!-- stat row -->
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--sp-4);margin-bottom:var(--sp-6);">
-  <div class="card" style="padding:var(--sp-4) var(--sp-5);">
-    <div class="muted small">Total cases</div>
-    <div style="font-size:28px;font-weight:650;">{{ total }}</div>
+  <!-- KPIs -->
+  <div class="kpis">
+    <div class="kpi"><div class="n">{{ total }}</div><div class="l">Total cases</div></div>
+    <div class="kpi"><div class="n">{{ in_flight }}</div><div class="l">In flight</div></div>
+    <div class="kpi"><div class="n">{{ active }}</div><div class="l">Active</div></div>
+    <div class="kpi {% if flagged %}alert{% endif %}">
+      <div class="n">{{ flagged|length }}</div><div class="l">Needs attention</div></div>
   </div>
-  <div class="card" style="padding:var(--sp-4) var(--sp-5);">
-    <div class="muted small">In flight</div>
-    <div style="font-size:28px;font-weight:650;">{{ in_flight }}</div>
-  </div>
-  <div class="card" style="padding:var(--sp-4) var(--sp-5);">
-    <div class="muted small">Active</div>
-    <div style="font-size:28px;font-weight:650;">{{ active }}</div>
-  </div>
-  <div class="card" style="padding:var(--sp-4) var(--sp-5);{% if flagged %}border-color:var(--flag-bg);{% endif %}">
-    <div class="muted small">Needs attention</div>
-    <div style="font-size:28px;font-weight:650;color:{% if flagged %}var(--flag-ink){% else %}inherit{% endif %};">{{ flagged|length }}</div>
-  </div>
-</div>
 
-<!-- pipeline columns -->
-<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:var(--sp-4);">
-  {% for col in columns %}
-    {% if col.cards %}
-    <section class="card" style="padding:var(--sp-4);">
-      <h2 style="display:flex;align-items:center;justify-content:space-between;">
-        <span>{{ col.label }}</span><span class="pill">{{ col.cards|length }}</span>
-      </h2>
-      <div>
+  <!-- Pipeline funnel -->
+  <div>
+    <h2>Pipeline</h2>
+    <div class="funnel">
+      {% for f in funnel %}
+      <a class="funnel-step {% if f.is_active %}term{% elif f.count == 0 %}empty0{% endif %}"
+         href="#stage-{{ f.stage }}">
+        <div class="fc">{{ f.count }}</div>
+        <div class="fl">{{ f.label }}</div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- In-flight work queue: the cases that need movement -->
+  <div>
+    <h2>In flight — needs movement ({{ in_flight }})</h2>
+    {% if inflight_cols %}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:var(--sp-4);">
+      {% for col in inflight_cols %}
+      <section class="wq-col" id="stage-{{ col.stage }}">
+        <h3 style="display:flex;align-items:center;justify-content:space-between;">
+          <span>{{ col.label }}</span><span class="pill">{{ col.cards|length }}</span>
+        </h3>
         {% for card in col.cards %}
-          <a href="/case/{{ card.case.case_id }}"
-             style="display:block;text-decoration:none;padding:11px 0;border-top:1px solid var(--line);">
-            <div style="font-weight:600;">{{ card.case.entity_legal_name }}</div>
-            <div class="muted small" style="margin-top:2px;">
-              {{ card.case.jira_key or card.case.case_id }}{% if card.days is not none %} · {{ card.days }}d in stage{% endif %}
+        <a class="wq-card" href="/case/{{ card.case.case_id }}">
+          <div style="font-weight:600;">{{ card.case.entity_legal_name }}</div>
+          <div class="muted small" style="margin-top:2px;">
+            {{ card.case.jira_key or card.case.case_id }}{% if card.days is not none %} · {{ card.days }}d in stage{% endif %}
+          </div>
+          {% if card.case.next_action %}
+            <div class="small" style="margin-top:4px;">
+              → {{ card.case.next_action }}{% if card.case.next_action_owner %}
+              <span class="muted">[{{ card.case.next_action_owner }}]</span>{% endif %}
             </div>
-            {% if card.case.lender_name %}<div class="muted small" style="margin-top:1px;">{{ card.case.lender_name }}</div>{% endif %}
-            {% if card.stale or card.case.flags or card.case.tier %}
-            <div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap;">
-              {% if card.stale %}<span class="pill warn">Stale &gt;30d</span>{% endif %}
-              {% if card.case.flags %}<span class="pill flag">{{ card.case.flags|length }} flag{{ 's' if card.case.flags|length > 1 else '' }}</span>{% endif %}
-              {% if card.case.tier %}<span class="pill">{{ card.case.tier }}</span>{% endif %}
-            </div>
-            {% endif %}
+          {% endif %}
+          {% if card.stale or card.case.flags %}
+          <div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap;">
+            {% if card.stale %}<span class="pill warn">Stale &gt;30d</span>{% endif %}
+            {% if card.case.flags %}<span class="pill flag">{{ card.case.flags|length }} flag{{ 's' if card.case.flags|length > 1 else '' }}</span>{% endif %}
+          </div>
+          {% endif %}
+        </a>
+        {% endfor %}
+      </section>
+      {% endfor %}
+    </div>
+    {% else %}
+      <div class="card"><p class="muted" style="margin:0;">Nothing in flight — every case is active, terminated, or off-pipeline.</p></div>
+    {% endif %}
+  </div>
+
+  <!-- Needs attention -->
+  {% if flagged %}
+  <div id="needs-attention">
+    <h2>Needs attention ({{ flagged|length }})</h2>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table>
+        <thead><tr><th style="padding-left:var(--sp-5);">Case</th><th>Flag</th></tr></thead>
+        <tbody>
+        {% for c in flagged %}{% for f in c.flags %}
+          <tr>
+            <td style="padding-left:var(--sp-5);white-space:nowrap;">
+              <a href="/case/{{ c.case_id }}" style="font-weight:600;text-decoration:none;">{{ c.entity_legal_name }}</a>
+              <span class="muted small">({{ c.jira_key or c.case_id }})</span>
+            </td>
+            <td class="muted">{{ f }}</td>
+          </tr>
+        {% endfor %}{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Active book — compact, collapsed -->
+  <div class="card" id="stage-active">
+    <details class="book">
+      <summary>Active book ({{ active }})</summary>
+      <table style="margin-top:var(--sp-3);">
+        <thead><tr><th>Business</th><th>Rho ID</th><th>Lender</th><th>Control</th><th>Days active</th></tr></thead>
+        <tbody>
+        {% for row in active_rows %}
+          <tr>
+            <td><a href="/case/{{ row.case.case_id }}" style="font-weight:600;text-decoration:none;">{{ row.case.entity_legal_name }}</a>
+              {% if row.case.flags %}<span class="pill flag" style="margin-left:6px;">{{ row.case.flags|length }}</span>{% endif %}</td>
+            <td class="muted">{{ row.case.business_id or '—' }}</td>
+            <td class="muted small">{{ row.case.lender_name or '—' }}</td>
+            <td>{% if row.case.control_state == 'lender_controlled' %}<span class="pill">Blocked</span>{% else %}<span class="pill ok">Active</span>{% endif %}</td>
+            <td class="muted">{% if row.days is not none %}{{ row.days }}d{% else %}—{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </details>
+  </div>
+
+  <!-- Off-pipeline -->
+  {% if off %}
+  <div>
+    <h2>Off-pipeline</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--sp-4);">
+      {% for o in off %}
+      <section class="card" style="padding:var(--sp-4);" id="stage-{{ o.stage }}">
+        <h3 style="display:flex;align-items:center;justify-content:space-between;">
+          <span>{{ o.label }}</span><span class="pill">{{ o.cases|length }}</span>
+        </h3>
+        {% for c in o.cases %}
+          <a href="/case/{{ c.case_id }}" style="display:block;text-decoration:none;padding:7px 0;border-top:1px solid var(--line);">
+            {{ c.entity_legal_name }} <span class="muted small">({{ c.jira_key or c.case_id }})</span>
+            {% if c.flags %}<span class="pill flag">{{ c.flags|length }}</span>{% endif %}
           </a>
         {% endfor %}
-      </div>
-    </section>
-    {% endif %}
-  {% endfor %}
-</div>
-
-{% if off %}
-<h2 style="margin-top:var(--sp-6);">Off-pipeline</h2>
-<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:var(--sp-4);">
-  {% for o in off %}
-  <section class="card" style="padding:var(--sp-4);">
-    <h2 style="display:flex;align-items:center;justify-content:space-between;font-weight:600;">
-      <span>{{ o.label }}</span><span class="pill">{{ o.cases|length }}</span>
-    </h2>
-    {% for c in o.cases %}
-      <a href="/case/{{ c.case_id }}" style="display:block;text-decoration:none;padding:8px 0;border-top:1px solid var(--line);">
-        {{ c.entity_legal_name }}
-        <span class="muted small">({{ c.jira_key or c.case_id }})</span>
-        {% if c.flags %}<span class="pill flag">{{ c.flags|length }}</span>{% endif %}
-      </a>
-    {% endfor %}
-  </section>
-  {% endfor %}
-</div>
-{% endif %}
-
-{% if flagged %}
-<h2 style="margin-top:var(--sp-6);">Needs attention</h2>
-<div class="card" style="padding:0;overflow:hidden;">
-  <table>
-    <thead><tr><th style="padding-left:var(--sp-5);">Case</th><th>Flag</th></tr></thead>
-    <tbody>
-    {% for c in flagged %}
-      {% for f in c.flags %}
-      <tr>
-        <td style="padding-left:var(--sp-5);white-space:nowrap;">
-          <a href="/case/{{ c.case_id }}" style="font-weight:600;text-decoration:none;">{{ c.entity_legal_name }}</a>
-          <span class="muted small">({{ c.jira_key or c.case_id }})</span>
-        </td>
-        <td class="muted">{{ f }}</td>
-      </tr>
+      </section>
       {% endfor %}
-    {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% endif %}
+    </div>
+  </div>
+  {% endif %}
 
-{% if total == 0 %}
-<div class="empty">
-  <p>No cases in the register yet.</p>
-  <a class="btn" href="/intake">+ Create the first DACA request</a>
+  {% if total == 0 %}
+  <div class="empty">
+    <p>No cases in the register yet.</p>
+    <p class="small">New requests arrive from <code>daca@rho.co</code> and Typeform and appear here after a sync
+      (<a href="/sync">Sync</a>).</p>
+  </div>
+  {% endif %}
+
 </div>
-{% endif %}
 {% endblock %}

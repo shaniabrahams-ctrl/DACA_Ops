@@ -7,12 +7,16 @@ SQLite register seeded from real Jira + Salesforce data. Server-rendered HTML
 build step.
 
 Screens:
-  /                     pipeline board — where every DACA is right now
-  /case/{case_id}       case detail — timeline, parties, flags, stage actions
-  /intake               net-new DACA request form (the funnel entry point)
-  POST /intake          create the case in the register
+  /                     dashboard — KPIs, pipeline funnel, in-flight work queue,
+                        needs-attention, active book
+  /case/{case_id}       case detail — stage tracker, timeline, parties, stage actions
+  /reports/webster      monthly Rho<>Webster report (R7)
+  /sync                 live refresh from Jira/Salesforce/DACA Summary sheet (R12)
   POST /case/{id}/advance   move a case to a new lifecycle stage (event-logged)
   POST /case/{id}/note      append a human note (event-logged)
+
+Net-new requests are NOT created by hand here — they arrive via daca@rho.co / Typeform
+and land in the register through sync (R12) / the loan-agreement intake.
 
 DATA: reads DACA_REGISTER_DB (env) — a real register. Live re-sync from Jira/SF
 runs through src/register/sync_*.py, which on Rhollout is driven by a scheduled
@@ -72,38 +76,54 @@ ALL_STAGES = [(s.value, label) for s, label in STAGE_ORDER] + \
              [(s.value, label) for s, label in OFF_PIPELINE]
 
 
+INFLIGHT_STAGES = [(s, label) for s, label in STAGE_ORDER if s != LifecycleStage.ACTIVE]
+
+
 @app.get("/", response_class=HTMLResponse)
-def board(request: Request):
+def dashboard(request: Request):
     r = reg()
     now = datetime.now(timezone.utc)
     cases = r.all_cases()
+    by_stage = {}
+    for c in cases:
+        by_stage.setdefault(c.lifecycle_stage, []).append(c)
 
-    columns = []
-    for stage, label in STAGE_ORDER:
-        group = [c for c in cases if c.lifecycle_stage == stage.value]
-        cards = []
-        for c in sorted(group, key=lambda x: x.stage_entered_at or ""):
-            d = _days_since(c.stage_entered_at, now)
-            cards.append({
-                "case": c,
-                "days": d,
-                "stale": d is not None and d > STALE_DAYS,
-            })
-        columns.append({"stage": stage.value, "label": label, "cards": cards})
+    def card(c):
+        d = _days_since(c.stage_entered_at, now)
+        return {"case": c, "days": d, "stale": d is not None and d > STALE_DAYS}
+
+    # Visual pipeline funnel — every lifecycle stage with its count.
+    funnel = [{"label": label, "stage": s.value,
+               "count": len(by_stage.get(s.value, [])),
+               "is_active": s == LifecycleStage.ACTIVE}
+              for s, label in STAGE_ORDER]
+
+    # In-flight work queue — only the stages that need movement (not Active).
+    inflight_cols = []
+    for s, label in INFLIGHT_STAGES:
+        group = by_stage.get(s.value, [])
+        if group:
+            cards = [card(c) for c in sorted(group, key=lambda x: x.stage_entered_at or "")]
+            inflight_cols.append({"stage": s.value, "label": label, "cards": cards})
+
+    # Active book — compact, not the whole page.
+    active_cases = sorted(by_stage.get(LifecycleStage.ACTIVE.value, []),
+                          key=lambda c: c.entity_legal_name.lower())
+    active_rows = [card(c) for c in active_cases]
 
     off = []
     for stage, label in OFF_PIPELINE:
-        group = [c for c in cases if c.lifecycle_stage == stage.value]
+        group = by_stage.get(stage.value, [])
         if group:
             off.append({"label": label, "cases": group, "stage": stage.value})
 
     flagged = [c for c in cases if c.flags]
-    active = sum(1 for c in cases if c.lifecycle_stage == LifecycleStage.ACTIVE.value)
-    in_flight = sum(len(col["cards"]) for col in columns
-                    if col["stage"] != LifecycleStage.ACTIVE.value)
+    in_flight = sum(len(col["cards"]) for col in inflight_cols)
 
-    return templates.TemplateResponse(request=request, name="board.html", context={ "columns": columns, "off": off, "flagged": flagged,
-        "total": len(cases), "active": active, "in_flight": in_flight,
+    return templates.TemplateResponse(request=request, name="board.html", context={
+        "funnel": funnel, "inflight_cols": inflight_cols,
+        "active_rows": active_rows, "off": off, "flagged": flagged,
+        "total": len(cases), "active": len(active_cases), "in_flight": in_flight,
         "generated": now.strftime("%Y-%m-%d %H:%M UTC"),
     })
 
@@ -123,53 +143,27 @@ def case_detail(request: Request, case_id: str):
     next_stages = [(s, label) for s, label in ALL_STAGES
                    if s != c.lifecycle_stage and is_allowed_transition(cur, LifecycleStage(s))]
 
+    # Stage tracker: where this case sits along the canonical pipeline.
+    canonical = [s for s, _ in STAGE_ORDER]
+    off_pipeline = cur not in canonical
+    cur_idx = canonical.index(cur) if not off_pipeline else -1
+    stepper = []
+    for i, (s, label) in enumerate(STAGE_ORDER):
+        if off_pipeline:
+            status = "off"
+        elif i < cur_idx:
+            status = "done"
+        elif i == cur_idx:
+            status = "current"
+        else:
+            status = "todo"
+        stepper.append({"label": label, "status": status})
+
     return templates.TemplateResponse(request=request, name="case.html", context={ "c": c, "events": events, "parties": parties,
         "stage_label": STAGE_LABELS.get(c.lifecycle_stage, c.lifecycle_stage),
         "days": _days_since(c.stage_entered_at, now),
-        "next_stages": next_stages,
+        "next_stages": next_stages, "stepper": stepper, "off_pipeline": off_pipeline,
     })
-
-
-@app.get("/intake", response_class=HTMLResponse)
-def intake_form(request: Request):
-    return templates.TemplateResponse(request=request, name="intake.html", context={})
-
-
-@app.post("/intake")
-def intake_submit(
-    entity_legal_name: str = Form(...),
-    lender_name: str = Form(""),
-    contact_name: str = Form(""),
-    contact_email: str = Form(""),
-    jira_key: str = Form(""),
-    notes: str = Form(""),
-):
-    r = reg()
-    ts = now_iso()
-    # net-new requests enter at application_received (a request has arrived; the
-    # application/typeform is the next gate). case_id = jira key if given, else a
-    # slug of the entity name so it's stable and human-readable.
-    slug = jira_key.strip() or ("NEW-" + "".join(
-        ch for ch in entity_legal_name.upper() if ch.isalnum())[:20])
-    case = Case(
-        case_id=slug,
-        entity_legal_name=entity_legal_name.strip(),
-        lifecycle_stage=LifecycleStage.APPLICATION_RECEIVED.value,
-        control_state=ControlState.UNKNOWN.value,
-        lender_name=lender_name.strip() or None,
-        jira_key=jira_key.strip() or None,
-        initial_inquiry_date=ts[:10],
-        stage_entered_at=ts,
-        last_synced_at=ts,
-    )
-    r.upsert_case(case, actor=OPERATOR, ts=ts, evidence_link="intake:webapp")
-    if contact_email.strip():
-        r.upsert_party(slug, role="borrower_contact", person=contact_name.strip(),
-                       email=contact_email.strip(), verified_against="intake:webapp")
-    if notes.strip():
-        r.append_event(slug, ts, OPERATOR, "note", new_value=notes.strip(),
-                       idempotency_key=f"intakenote:{slug}:{ts}")
-    return RedirectResponse(url=f"/case/{slug}", status_code=303)
 
 
 @app.post("/case/{case_id}/advance")
