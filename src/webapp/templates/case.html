@@ -12,7 +12,9 @@
   </div>
 </div>
 <p class="muted">
-  {{ c.jira_key or c.case_id }}
+  {% set key = c.jira_key or c.case_id %}
+  {% if jira_url(key) %}<a class="ext" href="{{ jira_url(key) }}" target="_blank" rel="noopener">{{ key }} ↗</a>{% else %}{{ key }}{% endif %}
+  {% if c.legal_jira_key %} · <a class="ext" href="{{ jira_url(c.legal_jira_key) }}" target="_blank" rel="noopener">{{ c.legal_jira_key }} ↗</a>{% endif %}
   {% if c.business_id %} · Business ID {{ c.business_id }}{% endif %}
   {% if c.lender_name %} · Lender: {{ c.lender_name }}{% endif %}
   {% if c.tier %} · {{ c.tier }}{% endif %}

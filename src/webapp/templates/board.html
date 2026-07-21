@@ -43,10 +43,11 @@
           <span>{{ col.label }}</span><span class="pill">{{ col.cards|length }}</span>
         </h3>
         {% for card in col.cards %}
-        <a class="wq-card" href="/case/{{ card.case.case_id }}">
-          <div style="font-weight:600;">{{ card.case.entity_legal_name }}</div>
+        {% set key = card.case.jira_key or card.case.case_id %}
+        <div class="wq-card">
+          <a class="wq-title" href="/case/{{ card.case.case_id }}">{{ card.case.entity_legal_name }}</a>
           <div class="muted small" style="margin-top:2px;">
-            {{ card.case.jira_key or card.case.case_id }}{% if card.days is not none %} · {{ card.days }}d in stage{% endif %}
+            {% if jira_url(key) %}<a class="ext" href="{{ jira_url(key) }}" target="_blank" rel="noopener">{{ key }} ↗</a>{% else %}{{ key }}{% endif %}{% if card.days is not none %} · {{ card.days }}d in stage{% endif %}
           </div>
           {% if card.case.next_action %}
             <div class="small" style="margin-top:4px;">
@@ -60,7 +61,7 @@
             {% if card.case.flags %}<span class="pill flag">{{ card.case.flags|length }} flag{{ 's' if card.case.flags|length > 1 else '' }}</span>{% endif %}
           </div>
           {% endif %}
-        </a>
+        </div>
         {% endfor %}
       </section>
       {% endfor %}
@@ -81,8 +82,9 @@
         {% for c in flagged %}{% for f in c.flags %}
           <tr>
             <td style="padding-left:var(--sp-5);white-space:nowrap;">
+              {% set key = c.jira_key or c.case_id %}
               <a href="/case/{{ c.case_id }}" style="font-weight:600;text-decoration:none;">{{ c.entity_legal_name }}</a>
-              <span class="muted small">({{ c.jira_key or c.case_id }})</span>
+              {% if jira_url(key) %}<a class="ext" href="{{ jira_url(key) }}" target="_blank" rel="noopener">{{ key }} ↗</a>{% else %}<span class="muted small">({{ key }})</span>{% endif %}
             </td>
             <td class="muted">{{ f }}</td>
           </tr>
@@ -126,10 +128,12 @@
           <span>{{ o.label }}</span><span class="pill">{{ o.cases|length }}</span>
         </h3>
         {% for c in o.cases %}
-          <a href="/case/{{ c.case_id }}" style="display:block;text-decoration:none;padding:7px 0;border-top:1px solid var(--line);">
-            {{ c.entity_legal_name }} <span class="muted small">({{ c.jira_key or c.case_id }})</span>
+        {% set key = c.jira_key or c.case_id %}
+          <div style="padding:7px 0;border-top:1px solid var(--line);">
+            <a class="wq-title" href="/case/{{ c.case_id }}">{{ c.entity_legal_name }}</a>
+            {% if jira_url(key) %}<a class="ext" href="{{ jira_url(key) }}" target="_blank" rel="noopener">{{ key }} ↗</a>{% else %}<span class="muted small">{{ key }}</span>{% endif %}
             {% if c.flags %}<span class="pill flag">{{ c.flags|length }}</span>{% endif %}
-          </a>
+          </div>
         {% endfor %}
       </section>
       {% endfor %}

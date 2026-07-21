@@ -30,6 +30,7 @@ consistent with the repo-wide approval rule.
 
 from __future__ import annotations
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -55,6 +56,18 @@ DB_PATH = os.environ.get(
 
 app = FastAPI(title="DACA Ops")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+# Deep-link ticket keys (CSHELP-123, LEGALHELP-45, …) to Jira. Returns None for
+# non-ticket identifiers (e.g. a numeric Business ID), so the template renders plain text.
+JIRA_BROWSE = "https://rho.atlassian.net/browse/"
+_JIRA_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
+
+
+def jira_url(key: str | None) -> str | None:
+    return JIRA_BROWSE + key if key and _JIRA_KEY_RE.match(key) else None
+
+
+templates.env.globals["jira_url"] = jira_url
 
 
 def now_iso() -> str:
