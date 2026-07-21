@@ -148,7 +148,17 @@ def sync_gsheet(reg: Register, content: str, now_iso: str) -> dict:
             last_synced_at=now_iso,
             flags=flags,
         )
-        existed = reg.get_case(case_id) is not None
+        existing = reg.get_case(case_id)
+        existed = existing is not None
+        if existed:
+            # Idempotency on re-sync: don't re-assert fields that downstream overlays
+            # own, or they ping-pong every run. Salesforce owns agreement_date; Jira
+            # owns the in-flight stage for "in progress" (deferred) rows. The sheet
+            # sets these only at case creation, as the initial backbone.
+            case.agreement_date = None
+            if stage is None:   # deferred status ("in progress"/unmapped) — Jira decides the stage
+                case.lifecycle_stage = existing.lifecycle_stage
+                case.control_state = existing.control_state
         reg.upsert_case(case, actor="sync:gsheet", ts=now_iso, evidence_link=SHEET_URL)
         created += 0 if existed else 1
         updated += 1 if existed else 0

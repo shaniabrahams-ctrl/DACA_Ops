@@ -41,6 +41,7 @@ from src.register.lifecycle import (
 )
 from src.register.pipeline import STAGE_ORDER, OFF_PIPELINE, STALE_DAYS, _days_since
 from src.reports import webster_monthly as wm
+from src.register.sync_service import run_sync, build_sources_from_env, last_sync_runs
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = os.environ.get(
@@ -272,6 +273,35 @@ def webster_download(as_of: str = "", fmt: str = "pdf"):
         path = wm.render_pdf(rows, f"{out_dir}/{base}.pdf", as_of_d)
         media = "application/pdf"
     return FileResponse(path, media_type=media, filename=path.rsplit("/", 1)[-1])
+
+
+# ── R12: live sync (in-app refresh) ───────────────────────────────────────────
+# Pulls Jira + Salesforce + the DACA Summary sheet directly and runs the syncs.
+# Sources with no credentials report "not configured" — the app stays usable
+# locally on the seeded register without any sync creds set.
+
+def _source_badges() -> list[dict]:
+    s = build_sources_from_env()
+    return [
+        {"name": "DACA Summary sheet", "configured": s.gsheet.configured()},
+        {"name": "Jira (CSHELP)", "configured": s.jira.configured()},
+        {"name": "Salesforce", "configured": s.salesforce.configured()},
+    ]
+
+
+@app.get("/sync", response_class=HTMLResponse)
+def sync_status(request: Request):
+    return templates.TemplateResponse(request=request, name="sync.html", context={
+        "sources": _source_badges(),
+        "runs": last_sync_runs(reg(), limit=10),
+        "any_configured": any(b["configured"] for b in _source_badges()),
+    })
+
+
+@app.post("/sync")
+def sync_now(request: Request):
+    run_sync(reg(), build_sources_from_env(), now_iso())
+    return RedirectResponse(url="/sync", status_code=303)
 
 
 @app.get("/health")

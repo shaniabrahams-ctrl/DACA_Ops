@@ -99,6 +99,14 @@ CREATE TABLE IF NOT EXISTS documents (
     UNIQUE(case_id, sha256)
 );
 
+CREATE TABLE IF NOT EXISTS sync_runs (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts       TEXT NOT NULL,               -- ISO-8601 UTC, when the run finished
+    source   TEXT NOT NULL,               -- 'all' | 'gsheet' | 'jira' | 'salesforce'
+    ok       INTEGER NOT NULL,            -- bool: did this source sync succeed
+    detail   TEXT                         -- JSON: per-source counts, or the error message
+);
+
 CREATE INDEX IF NOT EXISTS idx_cases_stage ON cases(lifecycle_stage);
 CREATE INDEX IF NOT EXISTS idx_events_case ON events(case_id, ts);
 CREATE INDEX IF NOT EXISTS idx_parties_case ON parties(case_id);

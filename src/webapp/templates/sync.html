@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Sync · DACA Ops{% endblock %}
+{% block nav_sync %}active{% endblock %}
+
+{% block body %}
+<div class="stack">
+
+  <div>
+    <h1>Live sync</h1>
+    <p class="muted" style="margin:var(--sp-2) 0 0;">
+      Refresh the register directly from Jira, Salesforce, and the DACA Summary sheet.
+      Idempotent — re-running makes no duplicate changes. On Rhollout this runs on a
+      schedule with service credentials.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Sources</h2>
+    <div style="display:flex; gap:var(--sp-3); flex-wrap:wrap; margin-bottom:var(--sp-4);">
+      {% for s in sources %}
+        <span class="pill {{ 'ok' if s.configured else '' }}">
+          {{ s.name }} — {{ 'configured' if s.configured else 'not configured' }}
+        </span>
+      {% endfor %}
+    </div>
+    {% if any_configured %}
+      <form method="post" action="/sync"><button class="btn" type="submit">Sync now</button></form>
+    {% else %}
+      <p class="small muted" style="margin:0;">
+        No source credentials are set, so there's nothing to sync yet. Set them in a local
+        <code>.env</code> (JIRA_EMAIL/JIRA_API_TOKEN, SF_INSTANCE_URL/SF_ACCESS_TOKEN,
+        GOOGLE_APPLICATION_CREDENTIALS) or, on Rhollout, in Secret Manager. Until then the
+        board runs on the register the agent seeded.
+      </p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Recent runs</h2>
+    {% if runs %}
+    <table>
+      <thead><tr><th style="width:180px;">When (UTC)</th><th style="width:110px;">Source</th>
+                 <th style="width:70px;">OK</th><th>Detail</th></tr></thead>
+      <tbody>
+        {% for r in runs %}
+        <tr>
+          <td class="small">{{ r.ts[:19] }}</td>
+          <td>{{ r.source }}</td>
+          <td>{% if r.ok %}<span class="pill ok">ok</span>{% else %}<span class="pill flag">fail</span>{% endif %}</td>
+          <td class="small muted">{{ r.detail }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <p class="empty">No sync runs yet.</p>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
