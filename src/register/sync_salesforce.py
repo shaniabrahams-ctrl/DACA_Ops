@@ -129,8 +129,14 @@ def sync_salesforce(reg: Register, sf_records: list[dict], now_iso: str) -> dict
         agreement = rec.get("DACA_Agreement_Date__c")
         sf_status = rec.get("DACA_Status__c")
 
+        # Carry the existing control_state forward so enrichment is a no-op for it.
+        # Salesforce enrichment only *promotes* control below (the closed_unreconciled
+        # reconcile); it must never silently downgrade a control_state the sheet already
+        # established (e.g. a fully-blocked / lender_controlled DACA) — the Case default
+        # of "unknown" would otherwise register as an intentional change in upsert_case.
         updates = Case(case_id=case.case_id, entity_legal_name=case.entity_legal_name,
-                       lifecycle_stage=case.lifecycle_stage)
+                       lifecycle_stage=case.lifecycle_stage,
+                       control_state=case.control_state)
         if biz is not None:
             updates.business_id = str(int(biz)) if isinstance(biz, float) else str(biz)
         if daca_type:
