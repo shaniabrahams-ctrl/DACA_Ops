@@ -22,16 +22,29 @@
 </p>
 
 {% if flag_items %}
-<div class="card" style="background:var(--flag-bg);border-color:transparent;margin-bottom:var(--sp-4);box-shadow:none;">
-  <strong style="color:var(--flag-ink);">Needs attention</strong>
-  <ul style="margin:8px 0 0;padding-left:18px;">
-    {% for h in flag_items %}
-    <li style="color:var(--flag-ink);margin-bottom:6px;">
-      {{ h.title }}{% if h.action %} — <span style="opacity:.85;">{{ h.action }}</span>{% endif %}
-      {% if h.detail %}<br><span class="small" style="opacity:.7;">{{ h.detail }}</span>{% endif %}
-    </li>
-    {% endfor %}
-  </ul>
+<div class="card" style="border-color:var(--flag-ink);margin-bottom:var(--sp-4);">
+  <h3 style="margin:0 0 6px;color:var(--flag-ink);">Needs attention — {{ flag_items|length }} to resolve</h3>
+  {% for h in flag_items %}
+  <div style="border-top:1px solid var(--line);padding:11px 0;">
+    <div style="font-weight:600;">{{ h.title }}</div>
+    {% if h.action %}<div class="muted small">{{ h.action }}</div>{% endif %}
+    {% if h.detail %}<div class="muted small" style="opacity:.8;">{{ h.detail }}</div>{% endif %}
+    <details style="margin-top:8px;">
+      <summary class="small" style="cursor:pointer;color:var(--accent);font-weight:600;">Resolve…</summary>
+      <form method="post" action="/case/{{ c.case_id }}/resolve" style="margin-top:8px;max-width:520px;">
+        <input type="hidden" name="flag" value="{{ h.raw }}">
+        <label class="small">Correct the stage (optional)</label>
+        <select name="new_stage">
+          <option value="">— keep current: {{ stage_label }} —</option>
+          {% for val,label in all_stages %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+        </select>
+        <label class="small">How to correct it / note</label>
+        <textarea name="note" rows="2" placeholder="e.g. Client reopened — Jira is right, move to Legal Redline Review"></textarea>
+        <div style="margin-top:8px;"><button class="btn" type="submit">Apply &amp; clear flag</button></div>
+      </form>
+    </details>
+  </div>
+  {% endfor %}
 </div>
 {% endif %}
 
@@ -133,6 +146,17 @@
   </div>
 
   <div>
+    <div class="card" style="margin-bottom:14px;">
+      <h3 style="margin:0 0 8px;">Sources</h3>
+      <div class="small" style="display:flex;flex-direction:column;gap:6px;">
+        <a class="ext" href="{{ sources.tracker }}" target="_blank" rel="noopener">DACA tracker (g-sheet) ↗</a>
+        {% if sources.jira %}<a class="ext" href="{{ sources.jira }}" target="_blank" rel="noopener">Jira {{ sources.jira_key }} ↗</a>{% endif %}
+        {% if sources.legal %}<a class="ext" href="{{ sources.legal }}" target="_blank" rel="noopener">Legal {{ sources.legal_key }} ↗</a>{% endif %}
+        {% if sources.zendesk %}<a class="ext" href="{{ sources.zendesk }}" target="_blank" rel="noopener">Zendesk ticket ↗</a>{% endif %}
+        <span class="muted">Salesforce: {% if sources.salesforce %}{{ sources.salesforce }}{% elif c.business_id %}by Business ID {{ c.business_id }}{% else %}—{% endif %}</span>
+      </div>
+    </div>
+
     <div class="card" style="margin-bottom:14px;">
       <h3 style="margin:0 0 8px;">Advance stage</h3>
       <form method="post" action="/case/{{ c.case_id }}/advance">

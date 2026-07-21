@@ -61,6 +61,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # Deep-link ticket keys (CSHELP-123, LEGALHELP-45, …) to Jira. Returns None for
 # non-ticket identifiers (e.g. a numeric Business ID), so the template renders plain text.
 JIRA_BROWSE = "https://rho.atlassian.net/browse/"
+DACA_SHEET_URL = "https://docs.google.com/spreadsheets/d/140z-O_ZoRyY97w4W5hBYBsUylQPJysj8rVXbzRJzRls/edit"
 _JIRA_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
 
 
@@ -197,6 +198,27 @@ def refresh(request: Request):
     return RedirectResponse(url="/", status_code=303)
 
 
+@app.get("/register", response_class=HTMLResponse)
+def all_dacas(request: Request):
+    """The tracker-replacement view: every DACA in one table, all sources linked."""
+    r = reg()
+    now = datetime.now(timezone.utc)
+    rows = []
+    for c in sorted(r.all_cases(), key=lambda x: x.entity_legal_name.lower()):
+        rows.append({
+            "c": c,
+            "stage_label": STAGE_LABELS.get(c.lifecycle_stage, c.lifecycle_stage),
+            "control": "Blocked" if c.control_state == ControlState.LENDER_CONTROLLED.value
+                       else ("Released" if c.control_state == ControlState.RELEASED.value else ""),
+            "jira": jira_url(c.jira_key or c.case_id),
+            "legal": jira_url(c.legal_jira_key),
+            "days": _days_since(c.stage_entered_at, now),
+        })
+    return templates.TemplateResponse(request=request, name="register.html", context={
+        "rows": rows, "total": len(rows), "sheet_url": DACA_SHEET_URL,
+    })
+
+
 ZENDESK_ENV = ("ZENDESK_SUBDOMAIN", "ZENDESK_EMAIL", "ZENDESK_API_TOKEN")
 
 
@@ -266,9 +288,28 @@ async def case_detail(request: Request, case_id: str):
         "days": _days_since(c.stage_entered_at, now),
         "next_stages": next_stages, "stepper": stepper, "off_pipeline": off_pipeline,
         "comms": comms, "zendesk_env": ZENDESK_ENV,
-        "flag_items": [humanize_flag(f) for f in c.flags],
+        "flag_items": [{**humanize_flag(f), "raw": f} for f in c.flags],
         "progress": stage_progress(c.lifecycle_stage),
+        "sources": {
+            "tracker": DACA_SHEET_URL,
+            "jira": jira_url(c.jira_key or c.case_id),
+            "jira_key": c.jira_key or (c.case_id if jira_url(c.case_id) else None),
+            "legal": jira_url(c.legal_jira_key), "legal_key": c.legal_jira_key,
+            "salesforce": c.salesforce_ref,
+            "zendesk": comms.get("agent_url") if comms.get("configured") else None,
+        },
+        "all_stages": ALL_STAGES,
     })
+
+
+@app.post("/case/{case_id}/resolve")
+def resolve_flag_route(case_id: str, flag: str = Form(...),
+                       new_stage: str = Form(""), note: str = Form("")):
+    """Apply the human's correction for an attention flag: optionally set the correct
+    stage, clear the flag, and log it. This is the 'tell the tool the right answer' path."""
+    reg().resolve_flag(case_id, flag, OPERATOR, now_iso(),
+                       note=note.strip() or None, new_stage=new_stage.strip() or None)
+    return RedirectResponse(url=f"/case/{case_id}", status_code=303)
 
 
 @app.post("/case/{case_id}/reply")

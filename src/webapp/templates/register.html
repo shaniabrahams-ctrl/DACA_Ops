@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}All DACAs — DACA Ops{% endblock %}
+{% block nav_register %}active{% endblock %}
+{% block body %}
+<div class="stack">
+
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:var(--sp-4);flex-wrap:wrap;">
+    <div>
+      <h1>All DACAs</h1>
+      <p class="muted small" style="margin:6px 0 0;">{{ total }} requests · the single register that replaces the tracker</p>
+    </div>
+    <a class="btn secondary" href="{{ sheet_url }}" target="_blank" rel="noopener">Open g-sheet tracker ↗</a>
+  </div>
+
+  <input id="filter" type="search" placeholder="Search business, Rho ID, lender, stage, ticket…"
+         style="max-width:420px;" oninput="filterRows()">
+
+  <div class="card" style="padding:0;overflow-x:auto;">
+    <table id="dacatable">
+      <thead>
+        <tr>
+          <th data-k="rid" onclick="sortBy('rid')">Rho ID</th>
+          <th data-k="name" onclick="sortBy('name')">Business name</th>
+          <th data-k="stage" onclick="sortBy('stage')">Stage</th>
+          <th data-k="lender" onclick="sortBy('lender')">Lender</th>
+          <th data-k="agr" onclick="sortBy('agr')">Agreement</th>
+          <th data-k="comp" onclick="sortBy('comp')">Completion</th>
+          <th>Tickets</th>
+          <th data-k="flags" onclick="sortBy('flags')">Attention</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        {% set c = row.c %}
+        <tr data-rid="{{ c.business_id or '' }}" data-name="{{ c.entity_legal_name|lower }}"
+            data-stage="{{ row.stage_label|lower }}" data-lender="{{ (c.lender_name or '')|lower }}"
+            data-agr="{{ c.agreement_date or '' }}" data-comp="{{ c.completion_date or '' }}"
+            data-flags="{{ c.flags|length }}">
+          <td class="muted">{{ c.business_id or '—' }}</td>
+          <td><a href="/case/{{ c.case_id }}" style="font-weight:600;text-decoration:none;">{{ c.entity_legal_name }}</a></td>
+          <td>
+            <span class="pill {% if c.lifecycle_stage == 'active' %}ok{% endif %}">{{ row.stage_label }}</span>
+            {% if row.control %}<span class="pill">{{ row.control }}</span>{% endif %}
+          </td>
+          <td class="small muted">{{ c.lender_name or '—' }}</td>
+          <td class="small muted">{{ c.agreement_date or '—' }}</td>
+          <td class="small muted">{{ c.completion_date or '—' }}</td>
+          <td class="small">
+            {% if row.jira %}<a class="ext" href="{{ row.jira }}" target="_blank" rel="noopener">{{ c.jira_key or c.case_id }} ↗</a>{% endif %}
+            {% if row.legal %}<br><a class="ext" href="{{ row.legal }}" target="_blank" rel="noopener">{{ c.legal_jira_key }} ↗</a>{% endif %}
+          </td>
+          <td>{% if c.flags %}<a href="/case/{{ c.case_id }}"><span class="pill flag">{{ c.flags|length }} to resolve</span></a>{% else %}<span class="muted small">—</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p id="noresults" class="empty" style="display:none;">No DACAs match your search.</p>
+  </div>
+</div>
+
+<script>
+  function filterRows() {
+    var q = document.getElementById('filter').value.toLowerCase();
+    var rows = document.querySelectorAll('#dacatable tbody tr'), shown = 0;
+    rows.forEach(function(tr){
+      var hit = tr.textContent.toLowerCase().indexOf(q) !== -1;
+      tr.style.display = hit ? '' : 'none';
+      if (hit) shown++;
+    });
+    document.getElementById('noresults').style.display = shown ? 'none' : 'block';
+  }
+  var sortState = {};
+  function sortBy(k) {
+    var tb = document.querySelector('#dacatable tbody');
+    var rows = Array.prototype.slice.call(tb.querySelectorAll('tr'));
+    var asc = sortState[k] = !sortState[k];
+    rows.sort(function(a, b){
+      var av = a.getAttribute('data-'+k) || '', bv = b.getAttribute('data-'+k) || '';
+      var an = parseFloat(av), bn = parseFloat(bv);
+      if (!isNaN(an) && !isNaN(bn)) { return asc ? an-bn : bn-an; }
+      return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+    rows.forEach(function(r){ tb.appendChild(r); });
+  }
+</script>
+{% endblock %}

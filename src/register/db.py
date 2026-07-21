@@ -172,6 +172,32 @@ class Register:
         self.conn.commit()
         return changes
 
+    def resolve_flag(self, case_id: str, flag: str, actor: str, ts: str,
+                     note: Optional[str] = None, new_stage: Optional[str] = None) -> None:
+        """Human resolution of an attention flag. Optionally corrects the stage to the
+        value the human says is right (applied directly — an explicit human correction
+        is authoritative, so it is NOT re-checked against the transition guard), removes
+        the flag, and records both as append-only events. This is how a rep tells the
+        tool the correct answer for a source-conflict / data-quality flag."""
+        c = self.get_case(case_id)
+        if not c:
+            return
+        if new_stage and new_stage != c.lifecycle_stage:
+            self.conn.execute(
+                "UPDATE cases SET lifecycle_stage=?, stage_entered_at=? WHERE case_id=?",
+                (new_stage, ts, case_id))
+            self.append_event(case_id, ts, actor, "stage_corrected", field="lifecycle_stage",
+                              old_value=c.lifecycle_stage, new_value=new_stage,
+                              idempotency_key=f"correct:{case_id}:{ts}")
+        if flag in c.flags:
+            c.flags.remove(flag)
+            self.conn.execute("UPDATE cases SET flags=? WHERE case_id=?",
+                              (json.dumps(c.flags), case_id))
+        self.append_event(case_id, ts, actor, "flag_resolved", field="flag",
+                          old_value=flag, new_value=(note or "resolved"),
+                          idempotency_key=f"resolve:{case_id}:{ts}")
+        self.conn.commit()
+
     def _add_flag(self, case_id: str, flag: str) -> None:
         c = self.get_case(case_id)
         if c and flag not in c.flags:
