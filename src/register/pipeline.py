@@ -34,6 +34,7 @@ STAGE_ORDER = [
 OFF_PIPELINE = [
     (LifecycleStage.CLOSED_UNRECONCILED, "Closed in Jira — executed? (needs reconciliation)"),
     (LifecycleStage.ON_HOLD, "On Hold"),
+    (LifecycleStage.CANCELED, "Canceled"),
     (LifecycleStage.REJECTED, "Rejected"),
     (LifecycleStage.TERMINATED, "Terminated"),
 ]

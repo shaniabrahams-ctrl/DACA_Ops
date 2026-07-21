@@ -65,6 +65,8 @@ JIRA_STATUS_TO_STAGE: dict[str, LifecycleStage] = {
     "Pre-Webster Package Review": LifecycleStage.COMPLIANCE_REVIEW,
     "Docusign Sent": LifecycleStage.DOCUSIGN,
     "Rejected": LifecycleStage.REJECTED,
+    "Canceled": LifecycleStage.CANCELED,
+    "Cancelled": LifecycleStage.CANCELED,   # spelling variant
     # NOTE: "Done" deliberately maps to CLOSED_UNRECONCILED, not ACTIVE.
     # Jira "Done" only means the ticket is closed — it does NOT prove the DACA
     # executed and the account is live. Promotion to ACTIVE requires a real
@@ -105,6 +107,7 @@ _FORWARD: dict[LifecycleStage, set[LifecycleStage]] = {
 }
 
 _ALWAYS_REACHABLE = {LifecycleStage.ON_HOLD, LifecycleStage.REJECTED,
+                     LifecycleStage.CANCELED,
                      LifecycleStage.TERMINATED, LifecycleStage.CLOSED_UNRECONCILED}
 
 
