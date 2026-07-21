@@ -174,6 +174,9 @@ locked to named users before real data loads).
   "Sync now" (R12); Typeform + Gmail + Drive per-case enrichment; Rhollout deploy.
 
 ## Companion documents
+- `docs/NEXT_SESSION_HANDOFF.md` — **how to continue the build** (concrete step-by-step
+  plans for the not-yet items R7/R8/R11/R12, how to re-seed live data in a fresh
+  session, and open loose ends). Start here to pick up the work.
 - `.claude/skills/daca-data-security/SKILL.md` — the storage/PII architecture.
 - `.claude/skills/daca-doc-prep/SKILL.md` — pre-filling the DACA Word doc.
 - `.claude/skills/daca-doc-currency/SKILL.md` — auditing SOP/template currency.
