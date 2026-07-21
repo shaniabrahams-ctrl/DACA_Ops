@@ -1,2 +1,7 @@
 __pycache__/
 *.pyc
+
+# real client data — never commit
+daca_register.db
+*.db
+.venv/

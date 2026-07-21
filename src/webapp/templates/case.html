@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{{ c.entity_legal_name }} — DACA Ops{% endblock %}
+{% block body %}
+<a href="/" class="muted" style="text-decoration:none;">← Pipeline</a>
+<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:6px;">
+  <h1 style="margin:0;">{{ c.entity_legal_name }}</h1>
+  <div>
+    <span class="pill ok">{{ stage_label }}</span>
+    {% if days is not none %}<span class="pill">{{ days }}d in stage</span>{% endif %}
+    <span class="pill">control: {{ c.control_state }}</span>
+  </div>
+</div>
+<p class="muted">
+  {{ c.jira_key or c.case_id }}
+  {% if c.business_id %} · Business ID {{ c.business_id }}{% endif %}
+  {% if c.lender_name %} · Lender: {{ c.lender_name }}{% endif %}
+  {% if c.tier %} · {{ c.tier }}{% endif %}
+  {% if c.agreement_date %} · Agreement {{ c.agreement_date }}{% endif %}
+</p>
+
+{% if c.flags %}
+<div class="card" style="background:var(--flag-bg);border-color:transparent;margin-bottom:14px;">
+  <strong style="color:var(--flag-ink);">🚩 Flags</strong>
+  <ul style="margin:6px 0 0;">{% for f in c.flags %}<li style="color:var(--flag-ink);">{{ f }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;">
+  <div>
+    <div class="card">
+      <h3 style="margin:0 0 10px;">Timeline <span class="muted" style="font-weight:400;font-size:12px;">(append-only)</span></h3>
+      <table>
+        <tr><th>When</th><th>Who</th><th>What</th></tr>
+        {% for e in events %}
+        <tr>
+          <td class="muted" style="white-space:nowrap;">{{ e.ts[:16].replace("T"," ") }}</td>
+          <td class="muted">{{ e.actor }}</td>
+          <td>
+            <strong>{{ e.event_type }}</strong>
+            {% if e.field %} · {{ e.field }}{% endif %}
+            {% if e.old_value and e.new_value %}: {{ e.old_value }} → {{ e.new_value }}
+            {% elif e.new_value %}: {{ e.new_value }}{% endif %}
+            {% if e.evidence_link %}<br><a class="muted" href="{{ e.evidence_link }}" style="font-size:12px;">{{ e.evidence_link }}</a>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+
+  <div>
+    <div class="card" style="margin-bottom:14px;">
+      <h3 style="margin:0 0 8px;">Advance stage</h3>
+      <form method="post" action="/case/{{ c.case_id }}/advance">
+        <select name="new_stage" required>
+          <option value="">— move to —</option>
+          {% for val,label in next_stages %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+        </select>
+        <label>Note (why)</label>
+        <textarea name="note" rows="2" placeholder="what happened / evidence"></textarea>
+        <div style="margin-top:10px;"><button class="btn" type="submit">Advance</button></div>
+      </form>
+    </div>
+
+    <div class="card" style="margin-bottom:14px;">
+      <h3 style="margin:0 0 8px;">Set next action</h3>
+      <form method="post" action="/case/{{ c.case_id }}/note">
+        <input name="next_action" placeholder="e.g. chase client for signed application"
+               value="{{ c.next_action or '' }}">
+        <label>Owner</label>
+        <input name="owner" placeholder="client / Rho / Webster / compliance"
+               value="{{ c.next_action_owner or '' }}">
+        <label>Note</label>
+        <textarea name="note" rows="2"></textarea>
+        <div style="margin-top:10px;"><button class="btn secondary" type="submit">Save</button></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 8px;">Parties</h3>
+      {% if parties %}
+        {% for p in parties %}
+          <div style="border-top:1px solid var(--line);padding:6px 0;">
+            <span class="pill">{{ p.role }}</span>
+            {{ p.person or p.legal_name or "" }}
+            {% if p.email %}<br><span class="muted">{{ p.email }}</span>{% endif %}
+            {% if p.verified_against %}<br><span class="muted" style="font-size:11px;">via {{ p.verified_against }}</span>{% endif %}
+          </div>
+        {% endfor %}
+      {% else %}<p class="muted">None recorded yet.</p>{% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

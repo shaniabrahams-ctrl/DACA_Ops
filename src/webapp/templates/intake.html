@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}New DACA Request — DACA Ops{% endblock %}
+{% block body %}
+<a href="/" class="muted" style="text-decoration:none;">← Pipeline</a>
+<h1 style="margin:6px 0 2px;">New DACA Request</h1>
+<p class="muted">Creates a net-new case in the register at "Application Received." Everything you
+enter is logged to the case's append-only timeline.</p>
+
+<form method="post" action="/intake" style="max-width:620px;">
+  <div class="card">
+    <label>Debtor / borrower legal entity name *</label>
+    <input name="entity_legal_name" required placeholder="e.g. Example Holdings, LLC">
+
+    <label>Lender (Secured Party)</label>
+    <input name="lender_name" placeholder="e.g. HSBC Ventures USA Inc.">
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div>
+        <label>Client contact name</label>
+        <input name="contact_name" placeholder="full name">
+      </div>
+      <div>
+        <label>Client contact email</label>
+        <input name="contact_email" type="email" placeholder="name@company.com">
+      </div>
+    </div>
+
+    <label>CSHELP ticket key (if one exists)</label>
+    <input name="jira_key" placeholder="e.g. CSHELP-9999 — leave blank to auto-generate an id">
+
+    <label>Notes</label>
+    <textarea name="notes" rows="3" placeholder="how the request came in, entities involved, anything to track"></textarea>
+
+    <div style="margin-top:16px;"><button class="btn" type="submit">Create case</button></div>
+  </div>
+</form>
+{% endblock %}
