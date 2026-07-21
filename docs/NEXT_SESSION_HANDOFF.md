@@ -9,6 +9,41 @@ Branch: `claude/nifty-darwin-rle1pt` (all work pushed). Model used: claude-opus-
 
 ---
 
+## Progress update — 2026-07-21 session
+
+- **R7 (monthly Webster report) — BUILT** (`src/reports/webster_monthly.py`,
+  `/reports/webster`; commit `2edda6f`). Renders XLSX+PDF + covering-email draft
+  from the register; human sends. Verified against the sheet's sub-table format.
+- **Loan-agreement filing — BUILT** (`src/operations/loan_agreements.py` +
+  `src/integrations/typeform_client.py`, `drive_writer.py`,
+  `tools/backfill_loan_agreements.py`; commit `14c4e9b`). Follows the Typeform
+  "upload your loan agreement" link → files into `DACAs {year}/{BID} - {Name}`,
+  logs a `loan_agmt` document + `document_received` event. Idempotent; unmatched
+  responses create a holding case + folder and are flagged. **Live run needs
+  `TYPEFORM_TOKEN` (Personal Access Token, scope `responses:read`) + a Drive
+  service account (`GOOGLE_APPLICATION_CREDENTIALS`).** `--dry-run` works without them.
+- **Bug fix (commit `d9a3bdd`)** — `sync_salesforce` no longer downgrades
+  `control_state` (dataclass-default clobber); required for the report's "Blocked" label.
+- Register re-seeds to ~50 cases from live sources (handoff said 49 — live drift).
+
+## R13. Slack action bot (agreed 2026-07-21 — do AFTER R12)
+
+Turn the **#daca-ops** feed (channel `C0APFKNF8SY`, today driven by the incumbent
+Gumloop agents) into a control surface so an ops rep can move a DACA along from Slack.
+Decisions made with the DRI:
+- **Interaction: @mention the bot** (natural language), e.g. "@DACA advance Bud to docusign".
+- **Actions in scope:** (1) advance stage / set next action — internal, event-logged;
+  (2) draft client email via the client-comms agent — **draft-only, the human sends**.
+  No outward action ever auto-sends.
+- **Infra:** needs a real Slack app (bot token + signing secret + Events API /
+  interactivity endpoint) on the Rhollout deploy. MCP Slack tools are agent-only, so
+  the deployed service uses the Slack app's own creds. **Depends on R12 (deploy).**
+- Every action is grounded in the register; @mention parsing resolves entity/case →
+  `case_id` and confirms in-thread before mutating. Consider whether this supersedes
+  the Gumloop posters or coexists (GUMLOOP_AGENT_REVIEW.md).
+
+---
+
 ## 0. Orient a fresh session (do this first, ~5 min)
 
 1. Read `.claude/skills/daca-ops-tool/SKILL.md` and `.claude/skills/daca-data-security/SKILL.md`.
