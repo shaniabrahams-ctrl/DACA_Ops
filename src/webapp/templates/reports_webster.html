@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Webster report · DACA Ops{% endblock %}
+{% block nav_reports %}active{% endblock %}
+
+{% block body %}
+<div class="stack">
+
+  <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:var(--sp-5); flex-wrap:wrap;">
+    <div>
+      <h1>Monthly Rho&lt;&gt;Webster DACAs report</h1>
+      <p class="muted" style="margin:var(--sp-2) 0 0;">
+        Active and in-progress Rho&lt;&gt;Webster DACAs, generated from the case register
+        · as of <strong>{{ as_of_display }}</strong> · {{ rows|length }} DACAs
+      </p>
+    </div>
+    <form method="get" action="/reports/webster" style="display:flex; align-items:flex-end; gap:var(--sp-3);">
+      <div>
+        <label for="as_of" style="margin-top:0;">Report as of (month-end)</label>
+        <input type="date" id="as_of" name="as_of" value="{{ as_of }}" style="width:180px;">
+      </div>
+      <button class="btn secondary" type="submit">Update</button>
+    </form>
+  </div>
+
+  <!-- Human gate notice -->
+  <div class="card" style="border-color:var(--warn-ink); background:var(--warn-bg); color:var(--warn-ink);">
+    <strong>Draft — not sent.</strong>
+    This tool generates the attachments and the covering email for review. Sending to
+    Webster is an external-to-bank action and is a manual step you take after reviewing.
+    Confirm the recipient list is current before sending.
+  </div>
+
+  <!-- Download + summary -->
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:var(--sp-4); flex-wrap:wrap;">
+      <div>
+        <div style="display:flex; gap:var(--sp-3); flex-wrap:wrap;">
+          <span class="pill ok">{{ n_active }} Active</span>
+          {% if n_blocked %}<span class="pill">{{ n_blocked }} Blocked</span>{% endif %}
+          <span class="pill warn">{{ n_inprogress }} In progress</span>
+        </div>
+        <p class="small muted" style="margin:var(--sp-3) 0 0;">Attachment name: <code>{{ basename }}</code></p>
+      </div>
+      <div style="display:flex; gap:var(--sp-3);">
+        <a class="btn" href="/reports/webster/download?as_of={{ as_of }}&amp;fmt=pdf">Download PDF</a>
+        <a class="btn" href="/reports/webster/download?as_of={{ as_of }}&amp;fmt=xlsx">Download XLSX</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Review-before-send panel -->
+  {% if review_rows %}
+  <div class="card" style="border-color:var(--flag-ink);">
+    <h2 style="color:var(--flag-ink);">Review before sending ({{ review_rows|length }})</h2>
+    <p class="small muted" style="margin-top:0;">
+      These rows are included but carry a data-quality flag or are marked Active/Blocked with
+      no completion date. Resolve at the source (or in the case) before sending to Webster —
+      the tool surfaces them rather than deciding for you.
+    </p>
+    <table>
+      <thead><tr><th>Rho ID</th><th>Business Name</th><th>Status</th><th>Why it needs review</th></tr></thead>
+      <tbody>
+        {% for r in review_rows %}
+        <tr>
+          <td><a href="/case/{{ r.case_id }}">{{ r.rho_id }}</a></td>
+          <td>{{ r.business_name }}</td>
+          <td>{{ r.status }}</td>
+          <td class="small">{{ r.review_reasons|join("; ") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- The list -->
+  <div class="card">
+    <h2>Rho&lt;&gt;Webster DACAs List</h2>
+    <table>
+      <thead>
+        <tr><th style="width:40px;">#</th><th style="width:90px;">Rho ID</th>
+            <th>Business Name</th><th style="width:110px;">Status</th>
+            <th style="width:140px;">DACA Completion</th></tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr{% if r.flags %} style="background:var(--flag-bg);"{% endif %}>
+          <td class="muted">{{ r.seq }}</td>
+          <td><a href="/case/{{ r.case_id }}">{{ r.rho_id }}</a></td>
+          <td>{{ r.business_name }}</td>
+          <td>
+            {% if r.status == "Active" %}<span class="pill ok">Active</span>
+            {% elif r.status == "Blocked" %}<span class="pill">Blocked</span>
+            {% else %}<span class="pill warn">In progress</span>{% endif %}
+          </td>
+          <td>{{ r.completion_display or "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Email draft -->
+  <div class="card">
+    <h2>Covering email (draft)</h2>
+    <table style="margin-bottom:var(--sp-4);">
+      <tbody>
+        <tr><th style="width:90px;">To</th><td>{{ email.to|join(", ") }}</td></tr>
+        <tr><th>Cc</th><td>{{ email.cc|join(", ") }}</td></tr>
+        <tr><th>Subject</th><td>{{ email.subject }}</td></tr>
+        <tr><th>Attach</th><td>{{ email.attachments|join(", ") }}</td></tr>
+      </tbody>
+    </table>
+    <pre style="white-space:pre-wrap; background:var(--surface-2); padding:var(--sp-4);
+                border-radius:var(--radius-sm); font-family:var(--font); margin:0;">{{ email.body }}</pre>
+    <p class="small muted" style="margin:var(--sp-3) 0 0;">{{ email.notice }}</p>
+  </div>
+
+</div>
+{% endblock %}

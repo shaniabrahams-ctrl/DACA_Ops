@@ -29,8 +29,10 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+import tempfile
+
 from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 
 from src.register.db import Register, Case
@@ -38,6 +40,7 @@ from src.register.lifecycle import (
     LifecycleStage, ControlState, is_allowed_transition,
 )
 from src.register.pipeline import STAGE_ORDER, OFF_PIPELINE, STALE_DAYS, _days_since
+from src.reports import webster_monthly as wm
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = os.environ.get(
@@ -202,6 +205,73 @@ def add_note(case_id: str, note: str = Form(...),
                    next_action_owner=owner.strip() or None)
         r.upsert_case(upd, actor=OPERATOR, ts=ts, evidence_link="webapp:note")
     return RedirectResponse(url=f"/case/{case_id}", status_code=303)
+
+
+# ── R7: Monthly Rho<>Webster report ───────────────────────────────────────────
+# Preview the list, download the two attachments, read the covering email draft.
+# The tool DRAFTS only — sending to Webster is a manual, human step (external gate).
+
+def _default_as_of() -> str:
+    return wm.month_end(datetime.now(timezone.utc).date()).isoformat()
+
+
+def _build_report(as_of: str):
+    """Row set + email draft for a given as-of month, with per-row review reasons."""
+    r = reg()
+    as_of_d = wm.month_end(as_of)
+    rows = wm.select_cases(r, as_of_d)
+    for row in rows:
+        row["completion_display"] = wm.fmt_completion(row["completion"])
+        reasons = list(row["flags"])
+        if row["status"] in ("Active", "Blocked") and not row["completion"]:
+            reasons.append("marked Active/Blocked but no completion date recorded")
+        row["review_reasons"] = reasons
+    return r, as_of_d, rows
+
+
+@app.get("/reports/webster", response_class=HTMLResponse)
+def webster_report(request: Request, as_of: str = ""):
+    as_of = as_of or _default_as_of()
+    r, as_of_d, rows = _build_report(as_of)
+
+    # Receipt/audit: record that this month's report was generated (idempotent per month).
+    ts = now_iso()
+    base = wm.report_basename(as_of_d)
+    for row in rows:
+        r.append_event(row["case_id"], ts, "report:webster_monthly", "report_generated",
+                       field="webster_monthly", new_value=f"{base} [{row['status']}]",
+                       evidence_link="report:webster_monthly",
+                       idempotency_key=f"webrpt:{row['case_id']}:{as_of_d.isoformat()}")
+
+    return templates.TemplateResponse(request=request, name="reports_webster.html", context={
+        "rows": rows,
+        "review_rows": [row for row in rows if row["review_reasons"]],
+        "email": wm.draft_email(as_of_d),
+        "as_of": as_of_d.isoformat(),
+        "as_of_display": wm.fmt_completion(as_of_d.isoformat()),
+        "basename": base,
+        "n_active": sum(1 for row in rows if row["status"] == "Active"),
+        "n_blocked": sum(1 for row in rows if row["status"] == "Blocked"),
+        "n_inprogress": sum(1 for row in rows if row["status"] == "In progress"),
+    })
+
+
+@app.get("/reports/webster/download")
+def webster_download(as_of: str = "", fmt: str = "pdf"):
+    as_of = as_of or _default_as_of()
+    as_of_d = wm.month_end(as_of)
+    rows = wm.select_cases(reg(), as_of_d)
+    base = wm.report_basename(as_of_d)
+    # Render into a per-request temp dir (contains entity names — never the repo, per
+    # the daca-data-security skill; the OS temp dir is outside git).
+    out_dir = tempfile.mkdtemp(prefix="daca_webster_")
+    if fmt == "xlsx":
+        path = wm.render_xlsx(rows, f"{out_dir}/{base}.xlsx", as_of_d)
+        media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else:
+        path = wm.render_pdf(rows, f"{out_dir}/{base}.pdf", as_of_d)
+        media = "application/pdf"
+    return FileResponse(path, media_type=media, filename=path.rsplit("/", 1)[-1])
 
 
 @app.get("/health")

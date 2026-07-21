@@ -5,6 +5,10 @@ uvicorn[standard]>=0.27
 jinja2>=3.1
 python-multipart>=0.0.9
 
+# Monthly Rho<>Webster report (R7) — deterministic file renders, no client data in git.
+openpyxl>=3.1     # XLSX attachment
+reportlab>=4.0    # PDF attachment (matches the prior ReportLab-generated report)
+
 # Live source-system clients (used by the sync jobs on Rhollout / local-with-creds).
 # The local app runs fine on the seeded register without these configured.
 httpx>=0.27
