@@ -26,6 +26,8 @@ from src.register.db import Register
 from src.register.sync_gsheet import sync_gsheet
 from src.register.sync_jira import sync_all as sync_jira_all
 from src.register.sync_salesforce import sync_salesforce
+from src.register.intake_email import sync_email_intake
+from src.integrations import slack_notify
 
 
 @dataclass
@@ -33,6 +35,7 @@ class Sources:
     gsheet: Optional[object] = None
     jira: Optional[object] = None
     salesforce: Optional[object] = None
+    gmail: Optional[object] = None
 
 
 def build_sources_from_env() -> Sources:
@@ -40,7 +43,29 @@ def build_sources_from_env() -> Sources:
     from src.register.clients.jira_client import JiraClient
     from src.register.clients.salesforce_client import SalesforceClient
     from src.register.clients.gsheet_client import GSheetClient
-    return Sources(gsheet=GSheetClient(), jira=JiraClient(), salesforce=SalesforceClient())
+    from src.register.clients.gmail_client import GmailClient
+    return Sources(gsheet=GSheetClient(), jira=JiraClient(),
+                   salesforce=SalesforceClient(), gmail=GmailClient())
+
+
+def _notify_new(reg: Register, case_ids: list[str], source: str) -> int:
+    """Post a #daca-ops alert for each newly-created case. Automatic (internal ops
+    notification, not client-facing) — no per-message gate; only fires on the freshly
+    created set so it never re-spams. No-op when Slack isn't configured."""
+    posted = 0
+    for cid in case_ids:
+        c = reg.get_case(cid)
+        if not c:
+            continue
+        contact = next((p.get("email") for p in reg.parties_for(cid)
+                        if p.get("role") == "borrower_contact" and p.get("email")), "")
+        text = slack_notify.format_new_request(
+            entity=c.entity_legal_name, requester=contact, subject="",
+            received=c.initial_inquiry_date or "", case_id=cid, source=source)
+        res = slack_notify.post(text)
+        if res.get("ok"):
+            posted += 1
+    return posted
 
 
 def _record(reg: Register, ts: str, source: str, ok: bool, detail) -> None:
@@ -102,6 +127,22 @@ def run_sync(reg: Register, sources: Sources, now_iso: str) -> dict:
             _record(reg, now_iso, "salesforce", False, {"error": str(e)})
     else:
         report["sources"]["salesforce"] = {"status": "not_configured"}
+
+    # 4) Gmail — net-new DACA inquiries that arrived only by email. New cases are
+    #    posted to #daca-ops automatically (the tool's own new-request notifier).
+    if _configured(sources.gmail):
+        try:
+            threads = sources.gmail.fetch()
+            rep = sync_email_intake(reg, threads, now_iso)
+            notified = _notify_new(reg, rep["created"], source="email")
+            report["sources"]["gmail"] = {"status": "ok", "new": len(rep["created"]),
+                                          "seen": rep["seen"], "notified": notified}
+            _record(reg, now_iso, "gmail", True, {**rep, "notified": notified})
+        except Exception as e:
+            report["sources"]["gmail"] = {"status": "error", "error": str(e)}
+            _record(reg, now_iso, "gmail", False, {"error": str(e)})
+    else:
+        report["sources"]["gmail"] = {"status": "not_configured"}
 
     statuses = [s["status"] for s in report["sources"].values()]
     report["ok"] = "error" not in statuses

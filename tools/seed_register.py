@@ -44,6 +44,7 @@ from src.register.db import Register
 from src.register.sync_jira import sync_all
 from src.register.sync_salesforce import sync_salesforce
 from src.register.sync_gsheet import sync_gsheet
+from src.register.intake_email import sync_email_intake
 
 
 def _load(path: str):
@@ -69,11 +70,12 @@ def main():
     ap.add_argument("--gsheet", help="Path to the 'Rho DACA Summary' sheet text (markdown/CSV)")
     ap.add_argument("--jira", help="Path to Jira DACA-Request search result JSON")
     ap.add_argument("--salesforce", help="Path to Salesforce DACA accounts SOQL result JSON")
+    ap.add_argument("--gmail", help="Path to daca@rho.co DACA-inquiry threads JSON (email intake)")
     ap.add_argument("--db", default="daca_register.db", help="Output register path")
     args = ap.parse_args()
 
-    if not (args.gsheet or args.jira or args.salesforce):
-        ap.error("provide at least one of --gsheet / --jira / --salesforce")
+    if not (args.gsheet or args.jira or args.salesforce or args.gmail):
+        ap.error("provide at least one of --gsheet / --jira / --salesforce / --gmail")
 
     now = datetime.now(timezone.utc).isoformat()
     reg = Register(args.db)
@@ -100,6 +102,13 @@ def main():
         r = sync_salesforce(reg, sf, now)
         print(f"Salesforce: {len(sf)} DACA accounts → "
               f"{r['enriched']} enriched, {r['reconciled']} reconciled, {r['flagged']} flagged")
+
+    if args.gmail:
+        threads = _load(args.gmail)
+        if isinstance(threads, dict):
+            threads = threads.get("threads", [])
+        r = sync_email_intake(reg, threads, now)
+        print(f"Gmail intake: {r['seen']} threads → {len(r['created'])} net-new cases")
 
     total = len(reg.all_cases())
     print(f"Register ready at {args.db} — {total} cases.")

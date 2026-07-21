@@ -122,6 +122,33 @@
   {% endif %}
 </div>
 
+<!-- Draft a client reply (template now; AI-polished when ANTHROPIC_API_KEY is set) -->
+<div class="card" style="margin-bottom:var(--sp-4);">
+  <h3 style="margin:0 0 10px;">Draft a client reply</h3>
+  <form method="get" action="/case/{{ c.case_id }}" style="display:flex;gap:var(--sp-3);align-items:flex-end;flex-wrap:wrap;">
+    <div>
+      <label class="small" for="draft_type" style="margin-top:0;">Type</label>
+      <select id="draft_type" name="draft_type" style="width:240px;">
+        {% for val,label in draft_types %}<option value="{{ val }}" {% if val == draft_type %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <button class="btn secondary" type="submit">Generate draft</button>
+  </form>
+  {% if draft %}
+  <div style="margin-top:var(--sp-4);">
+    <div class="small muted" style="margin-bottom:4px;">
+      {% if draft.ai %}AI-drafted{% else %}Template draft (set ANTHROPIC_API_KEY for AI-polished){% endif %} · review &amp; edit before sending
+    </div>
+    <textarea rows="12" style="font-family:var(--mono, monospace);font-size:13px;">{{ draft.text }}</textarea>
+    {% if comms.configured and comms.thread %}
+    <p class="small muted" style="margin:8px 0 0;">Paste into the Zendesk reply box above to send, or copy into email.</p>
+    {% else %}
+    <p class="small muted" style="margin:8px 0 0;">Copy into your email reply to the client. (Zendesk send appears here once a ticket is linked.)</p>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
 <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;">
   <div>
     <div class="card">

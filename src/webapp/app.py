@@ -48,6 +48,7 @@ from src.register.pipeline import STAGE_ORDER, OFF_PIPELINE, STALE_DAYS, _days_s
 from src.reports import webster_monthly as wm
 from src.register.sync_service import run_sync, build_sources_from_env, last_sync_runs
 from src.webapp.humanize import humanize_flag, SEV_ORDER
+from src.webapp.draft_reply import draft_reply, TYPES as DRAFT_TYPES
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = os.environ.get(
@@ -260,7 +261,7 @@ async def load_comms(case: Case, parties: list[dict]) -> dict:
 
 
 @app.get("/case/{case_id}", response_class=HTMLResponse)
-async def case_detail(request: Request, case_id: str):
+async def case_detail(request: Request, case_id: str, draft_type: str = ""):
     r = reg()
     c = r.get_case(case_id)
     if not c:
@@ -269,6 +270,14 @@ async def case_detail(request: Request, case_id: str):
     events = list(reversed(r.events_for(case_id)))  # newest first
     parties = r.parties_for(case_id)
     comms = await load_comms(c, parties)
+
+    # Draft a client reply on demand (template now; AI-polished when ANTHROPIC_API_KEY set).
+    draft = None
+    if draft_type:
+        last_note = next((e["new_value"] for e in events
+                          if e.get("event_type") == "note" and e.get("new_value")), "")
+        rep = (OPERATOR.split("@")[0].split(":")[-1].split(".")[0].capitalize() or "Shani")
+        draft = draft_reply(c, parties, last_note, draft_type, rep_name=rep)
 
     # legal next stages this case may move to (typed transition rules)
     cur = LifecycleStage(c.lifecycle_stage)
@@ -298,6 +307,7 @@ async def case_detail(request: Request, case_id: str):
         "comms": comms, "zendesk_env": ZENDESK_ENV,
         "flag_items": [{**humanize_flag(f), "raw": f} for f in c.flags],
         "progress": stage_progress(c.lifecycle_stage),
+        "draft": draft, "draft_type": draft_type, "draft_types": DRAFT_TYPES,
         "sources": {
             "tracker": DACA_SHEET_URL,
             "jira": jira_url(c.jira_key or c.case_id),
@@ -459,6 +469,7 @@ def _source_badges() -> list[dict]:
         {"name": "DACA Summary sheet", "configured": s.gsheet.configured()},
         {"name": "Jira (CSHELP)", "configured": s.jira.configured()},
         {"name": "Salesforce", "configured": s.salesforce.configured()},
+        {"name": "Gmail (daca@rho.co)", "configured": s.gmail.configured()},
     ]
 
 
