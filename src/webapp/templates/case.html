@@ -48,6 +48,12 @@
     <div class="step {{ s.status }}"><div class="sd"></div><div class="sl">{{ s.label }}</div></div>
     {% endfor %}
   </div>
+  {% if progress %}
+  <p class="pnext" style="margin:12px 0 0;">
+    Step <b>{{ progress.step }}</b> of {{ progress.total }} · Now <b>{{ progress.now }}</b>{% if progress.next %} → Next <b>{{ progress.next }}</b>{% endif %}
+    · {{ progress.remaining }} step{{ 's' if progress.remaining != 1 else '' }} to Active
+  </p>
+  {% endif %}
 </div>
 
 <!-- Client comms (Zendesk) -->

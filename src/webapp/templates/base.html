@@ -196,6 +196,28 @@
   .age-pill.age-amber { background:#FBEFD3; color:#7A5B18; }
   .age-pill.age-ok { background:var(--surface-2); color:var(--muted); }
 
+  /* side-by-side scrollable columns */
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:var(--sp-4); align-items:start; }
+  @media (max-width:900px){ .split { grid-template-columns:1fr; } }
+  .panel { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); display:flex; flex-direction:column; max-height:74vh; }
+  .panel > .phead { padding:var(--sp-4) var(--sp-5) var(--sp-3); border-bottom:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between; }
+  .panel > .pbody { overflow-y:auto; padding:4px 0; }
+  .panel > .pbody.pad { padding:var(--sp-4) var(--sp-5); }
+
+  /* end-to-end progress card */
+  .pcard { display:block; text-decoration:none; color:inherit; padding:12px var(--sp-5);
+    border-top:1px solid var(--line); }
+  .pcard:first-child { border-top:0; }
+  .pcard:hover { background:var(--surface-2); }
+  .track { display:flex; gap:3px; margin:9px 0 7px; }
+  .track .seg { height:6px; flex:1; border-radius:3px; background:var(--line); }
+  .track .seg.done { background:var(--accent); }
+  .track .seg.current { background:var(--accent); box-shadow:0 0 0 2px var(--ok-bg); }
+  .pnext { font-size:12.5px; color:var(--muted); }
+  .pnext b { color:var(--ink); font-weight:600; }
+
   /* client comms thread */
   .thread { display:flex; flex-direction:column; gap:8px; max-height:420px; overflow-y:auto;
     padding-right:4px; }

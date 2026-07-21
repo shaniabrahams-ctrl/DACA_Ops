@@ -22,62 +22,61 @@
     <div class="kpi"><div class="n">{{ active }}</div><div class="l">Active DACAs</div></div>
   </div>
 
-  <!-- What needs you — the action queue -->
-  {% if actions %}
-  <div>
-    <h2>What needs you ({{ actions|length }})</h2>
-    <div class="card" style="padding:0;overflow:hidden;">
-      {% for a in actions %}
-      <div class="action {{ a.severity }}">
-        <span class="sev"></span>
-        <div class="who">
-          <div class="title">{{ a.title }}</div>
-          {% if a.action %}<div class="do">{{ a.action }}</div>{% endif %}
-          {% if a.detail %}<div class="do" style="font-size:12px;opacity:.8;">{{ a.detail }}</div>{% endif %}
-        </div>
-        <div class="meta">
-          <a href="/case/{{ a.case.case_id }}" style="font-weight:600;text-decoration:none;">{{ a.case.entity_legal_name }}</a>
-          {% set key = a.case.jira_key or a.case.case_id %}
-          {% if jira_url(key) %}<br><a class="ext" href="{{ jira_url(key) }}" target="_blank" rel="noopener">{{ key }} ↗</a>{% endif %}
-        </div>
+  <!-- Side by side: action queue | in-flight end-to-end progress (each scrolls) -->
+  <div class="split">
+    <section class="panel">
+      <div class="phead"><h2 style="margin:0;">What needs you</h2><span class="pill flag">{{ actions|length }}</span></div>
+      <div class="pbody">
+        {% if actions %}
+          {% for a in actions %}
+          <div class="action {{ a.severity }}">
+            <span class="sev"></span>
+            <div class="who">
+              <div class="title">{{ a.title }}</div>
+              {% if a.action %}<div class="do">{{ a.action }}</div>{% endif %}
+              {% if a.detail %}<div class="do" style="font-size:12px;opacity:.8;">{{ a.detail }}</div>{% endif %}
+            </div>
+            <div class="meta">
+              <a href="/case/{{ a.case.case_id }}" style="font-weight:600;text-decoration:none;">{{ a.case.entity_legal_name }}</a>
+              {% set key = a.case.jira_key or a.case.case_id %}
+              {% if jira_url(key) %}<br><a class="ext" href="{{ jira_url(key) }}" target="_blank" rel="noopener">{{ key }} ↗</a>{% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <p class="muted" style="padding:var(--sp-5);margin:0;">Nothing needs attention right now.</p>
+        {% endif %}
       </div>
-      {% endfor %}
-    </div>
-  </div>
-  {% endif %}
+    </section>
 
-  <!-- Pipeline: Kanban of in-flight work -->
-  <div>
-    <h2>Pipeline — in flight ({{ in_flight }})</h2>
-    {% if inflight_cols %}
-    <div class="kanban">
-      {% for col in inflight_cols %}
-      <section class="kcol" id="stage-{{ col.stage }}">
-        <h3><span>{{ col.label }}</span><span class="pill">{{ col.cards|length }}</span></h3>
-        {% for cd in col.cards %}
-        {% set key = cd.case.jira_key or cd.case.case_id %}
-        <a class="kcard age-{{ cd.aging }}" href="/case/{{ cd.case.case_id }}">
-          <div class="kt">{{ cd.case.entity_legal_name }}</div>
-          <div class="km">
-            {% if jira_url(key) %}{{ key }}{% else %}{{ key }}{% endif %}
-            {% if cd.case.lender_name %} · {{ cd.case.lender_name }}{% endif %}
-          </div>
-          {% if cd.case.next_action %}
-            <div class="km" style="margin-top:5px;color:var(--ink);">→ {{ cd.case.next_action }}
-              {% if cd.case.next_action_owner %}<span class="muted">[{{ cd.case.next_action_owner }}]</span>{% endif %}</div>
-          {% endif %}
-          <div style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-            {% if cd.days is not none %}<span class="age-pill age-{{ cd.aging }}">{{ cd.days }}d in stage</span>{% endif %}
-            {% if cd.case.flags %}<span class="pill flag">needs review</span>{% endif %}
-          </div>
-        </a>
-        {% endfor %}
-      </section>
-      {% endfor %}
-    </div>
-    {% else %}
-      <div class="card"><p class="muted" style="margin:0;">Nothing in flight right now.</p></div>
-    {% endif %}
+    <section class="panel">
+      <div class="phead"><h2 style="margin:0;">In flight</h2><span class="pill">{{ in_flight }}</span></div>
+      <div class="pbody">
+        {% if inflight_cards %}
+          {% for cd in inflight_cards %}
+          {% set key = cd.case.jira_key or cd.case.case_id %}
+          <a class="pcard" href="/case/{{ cd.case.case_id }}">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">
+              <span style="font-weight:600;">{{ cd.case.entity_legal_name }}</span>
+              {% if cd.days is not none %}<span class="age-pill age-{{ cd.aging }}">{{ cd.days }}d</span>{% endif %}
+            </div>
+            <div class="pnext" style="font-size:12px;">{{ key }}{% if cd.case.flags %} · <span style="color:var(--flag-ink);">needs review</span>{% endif %}</div>
+            {% if cd.progress %}
+            <div class="track" aria-hidden="true">
+              {% for sg in cd.progress.segs %}<span class="seg {{ sg.status }}" title="{{ sg.label }}"></span>{% endfor %}
+            </div>
+            <div class="pnext">
+              Step {{ cd.progress.step }}/{{ cd.progress.total }} · Now <b>{{ cd.progress.now }}</b>{% if cd.progress.next %} → Next <b>{{ cd.progress.next }}</b>{% endif %}
+              · {{ cd.progress.remaining }} to Active
+            </div>
+            {% endif %}
+          </a>
+          {% endfor %}
+        {% else %}
+          <p class="muted" style="padding:var(--sp-5);margin:0;">Nothing in flight right now.</p>
+        {% endif %}
+      </div>
+    </section>
   </div>
 
   <!-- Active book — collapsed -->

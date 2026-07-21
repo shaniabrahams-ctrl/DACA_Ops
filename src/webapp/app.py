@@ -103,6 +103,23 @@ def _aging(days: int | None) -> str:
     return "ok"
 
 
+def stage_progress(stage_value: str) -> dict | None:
+    """End-to-end progress of a case along the canonical pipeline (…→ Active):
+    a done/current/todo segment per stage, the current + next stage labels, and how
+    many steps remain to Active. None for off-pipeline stages."""
+    vals = [s.value for s, _ in STAGE_ORDER]
+    if stage_value not in vals:
+        return None
+    idx = vals.index(stage_value)
+    last = len(vals) - 1
+    segs = [{"label": label,
+             "status": "done" if i < idx else ("current" if i == idx else "todo")}
+            for i, (s, label) in enumerate(STAGE_ORDER)]
+    return {"segs": segs, "now": STAGE_ORDER[idx][1],
+            "next": STAGE_ORDER[idx + 1][1] if idx < last else None,
+            "remaining": last - idx, "step": idx + 1, "total": last + 1}
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     r = reg()
@@ -117,13 +134,14 @@ def dashboard(request: Request):
         return {"case": c, "days": d, "stale": d is not None and d > STALE_DAYS,
                 "aging": _aging(d)}
 
-    # Kanban board — one column per in-flight stage (the work that needs movement).
-    inflight_cols = []
+    # In-flight cases as end-to-end progress rows (most-aged first).
+    inflight_cards = []
     for s, label in INFLIGHT_STAGES:
-        group = by_stage.get(s.value, [])
-        if group:
-            cards = [card(c) for c in sorted(group, key=lambda x: -( _days_since(x.stage_entered_at, now) or 0))]
-            inflight_cols.append({"stage": s.value, "label": label, "cards": cards})
+        for c in by_stage.get(s.value, []):
+            cd = card(c)
+            cd["progress"] = stage_progress(c.lifecycle_stage)
+            inflight_cards.append(cd)
+    inflight_cards.sort(key=lambda cd: -(cd["days"] or 0))
 
     # Active book — compact, collapsed (progressive disclosure).
     active_cases = sorted(by_stage.get(LifecycleStage.ACTIVE.value, []),
@@ -146,21 +164,20 @@ def dashboard(request: Request):
             h = humanize_flag(f)
             actions.append({"case": c, **h})
     flagged_ids = {c.case_id for c in cases if c.flags}
-    for col in inflight_cols:
-        for cd in col["cards"]:
-            if cd["stale"] and cd["case"].case_id not in flagged_ids:
-                actions.append({
-                    "case": cd["case"], "severity": "med",
-                    "title": f"Aging — {cd['days']} days in {stage_label.get(cd['case'].lifecycle_stage, 'stage')}",
-                    "action": "Follow up to move it forward.", "detail": ""})
+    for cd in inflight_cards:
+        if cd["stale"] and cd["case"].case_id not in flagged_ids:
+            actions.append({
+                "case": cd["case"], "severity": "med",
+                "title": f"Aging — {cd['days']} days in {stage_label.get(cd['case'].lifecycle_stage, 'stage')}",
+                "action": "Follow up to move it forward.", "detail": ""})
     actions.sort(key=lambda a: SEV_ORDER.get(a["severity"], 3))
 
-    in_flight = sum(len(col["cards"]) for col in inflight_cols)
-    at_risk = sum(1 for col in inflight_cols for cd in col["cards"] if cd["stale"])
+    in_flight = len(inflight_cards)
+    at_risk = sum(1 for cd in inflight_cards if cd["stale"])
     last_synced = max((c.last_synced_at for c in cases if c.last_synced_at), default=None)
 
     return templates.TemplateResponse(request=request, name="board.html", context={
-        "inflight_cols": inflight_cols, "active_rows": active_rows, "off": off,
+        "inflight_cards": inflight_cards, "active_rows": active_rows, "off": off,
         "actions": actions,
         "total": len(cases), "active": len(active_cases), "in_flight": in_flight,
         "at_risk": at_risk,
@@ -250,6 +267,7 @@ async def case_detail(request: Request, case_id: str):
         "next_stages": next_stages, "stepper": stepper, "off_pipeline": off_pipeline,
         "comms": comms, "zendesk_env": ZENDESK_ENV,
         "flag_items": [humanize_flag(f) for f in c.flags],
+        "progress": stage_progress(c.lifecycle_stage),
     })
 
 
