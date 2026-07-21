@@ -21,6 +21,11 @@ def _tail(flag: str) -> str:
 
 def humanize_flag(flag: str) -> dict:
     f = flag or ""
+    if f.startswith("new_email_intake"):
+        return {"severity": "high",
+                "title": "New DACA request received by email",
+                "action": "Confirm the borrower entity + lender, then open the Jira ticket / send the application.",
+                "detail": _tail(f)}
     if f.startswith("source_conflict"):
         return {"severity": "high",
                 "title": "Systems disagree on this DACA's status",

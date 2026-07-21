@@ -14,6 +14,26 @@
     <form method="post" action="/refresh"><button class="btn secondary" type="submit">↻ Refresh</button></form>
   </div>
 
+  <!-- New requests — surface net-new intakes prominently -->
+  {% if new_requests %}
+  <div class="card" style="border-color:var(--accent);border-left:4px solid var(--accent);">
+    <h2 style="margin:0 0 6px;">🆕 New requests to triage ({{ new_requests|length }})</h2>
+    {% for c in new_requests %}
+    {% set key = c.jira_key or c.case_id %}
+    <div style="border-top:1px solid var(--line);padding:9px 0;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+      <div>
+        <a href="/case/{{ c.case_id }}" style="font-weight:600;text-decoration:none;">{{ c.entity_legal_name }}</a>
+        <span class="muted small"> · {% if c.initial_inquiry_date %}in since {{ c.initial_inquiry_date }}{% else %}new{% endif %}</span>
+        <div class="muted small">Needs triage — confirm borrower entity + lender, then open the Jira ticket / send the application.</div>
+      </div>
+      <div class="small" style="text-align:right;">
+        {% if jira_url(key) %}<a class="ext" href="{{ jira_url(key) }}" target="_blank" rel="noopener">{{ key }} ↗</a>{% else %}<span class="muted">no Jira yet</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <!-- At-a-glance KPIs -->
   <div class="kpis">
     <div class="kpi"><div class="n">{{ in_flight }}</div><div class="l">In flight</div></div>

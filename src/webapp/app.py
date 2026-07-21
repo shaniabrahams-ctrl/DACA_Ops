@@ -177,8 +177,16 @@ def dashboard(request: Request):
     at_risk = sum(1 for cd in inflight_cards if cd["stale"])
     last_synced = max((c.last_synced_at for c in cases if c.last_synced_at), default=None)
 
+    # Net-new requests to triage — email intakes + brand-new inquiries, surfaced up top.
+    new_requests = sorted(
+        [c for c in cases
+         if any(str(fl).startswith("new_email_intake") for fl in c.flags)
+         or c.lifecycle_stage == LifecycleStage.INQUIRY.value],
+        key=lambda c: (c.initial_inquiry_date or ""), reverse=True)
+
     return templates.TemplateResponse(request=request, name="board.html", context={
         "inflight_cards": inflight_cards, "active_rows": active_rows, "off": off,
+        "new_requests": new_requests,
         "actions": actions,
         "total": len(cases), "active": len(active_cases), "in_flight": in_flight,
         "at_risk": at_risk,
