@@ -42,6 +42,7 @@ class LifecycleStage(str, Enum):
     # Off-pipeline flags (not stages you pass through)
     ON_HOLD = "on_hold"
     REJECTED = "rejected"
+    CANCELED = "canceled"                        # client stalled / withdrew (distinct from rejected)
     CLOSED_UNRECONCILED = "closed_unreconciled"  # Jira "Done" with no executed-doc confirmation yet
 
 

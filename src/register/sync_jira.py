@@ -60,41 +60,68 @@ def parse_entity_name(summary: str) -> str:
     return cand or summary
 
 
+# lifecycle states the sheet/Salesforce establish as authoritative end-states —
+# a Jira status must never silently downgrade these; a disagreement is flagged.
+_TERMINAL = {
+    LifecycleStage.ACTIVE.value, LifecycleStage.TERMINATED.value,
+    LifecycleStage.CANCELED.value, LifecycleStage.REJECTED.value,
+}
+
+
 def sync_ticket(reg: Register, ticket: dict, now_iso: str) -> list[str]:
     """
-    Map one Jira ticket dict -> Case and upsert. Returns changes applied.
-    `ticket` is one node from the Atlassian search response: {key, fields:{...}}.
+    Overlay one Jira ticket onto the register. If a case already exists for this
+    Jira key (seeded from the DACA Summary sheet), Jira updates its PIPELINE STAGE
+    only when the case is still in-flight — it never downgrades an Active/Terminated
+    case, and a genuine conflict (e.g. sheet says Canceled, Jira still open) is
+    recorded as a flag. If no case exists yet (a brand-new ticket not in the sheet),
+    a new case is created keyed by the Jira key.
     """
     key = ticket["key"]
     fields = ticket.get("fields", {})
     summary = fields.get("summary", "") or ""
     status_name = (fields.get("status") or {}).get("name", "") or ""
     updated = (fields.get("updated") or "")[:19] or now_iso
-
-    stage, warning = stage_for_jira_status(status_name)
-    flags: list[str] = []
-    if warning:
-        flags.append(warning)
-        stage = stage or LifecycleStage.INQUIRY  # park it somewhere visible, flagged
-
-    entity = parse_entity_name(summary)
     evidence = f"{JIRA_BROWSE}{key}"
 
-    case = Case(
-        case_id=key,                       # stable id = jira key for iteration 1
-        entity_legal_name=entity,
-        lifecycle_stage=stage.value,
-        jira_key=key,
-        last_synced_at=now_iso,
-        stage_entered_at=updated,
-        flags=flags,
-    )
-    # record the raw summary as a note event once (idempotent) so the parse is auditable
-    reg_changes = reg.upsert_case(case, actor="sync:jira", ts=updated, evidence_link=evidence)
-    reg.append_event(key, updated, "sync:jira", "note", field="jira_summary",
-                     new_value=summary, evidence_link=evidence,
-                     idempotency_key=f"summary:{key}:{summary}")
-    return reg_changes
+    stage, warning = stage_for_jira_status(status_name)
+    jira_stage = stage or LifecycleStage.INQUIRY
+
+    existing = reg.get_case_by_jira(key)
+
+    if existing is None:
+        # brand-new ticket, not yet in the sheet — create keyed by the Jira key
+        case = Case(
+            case_id=key,
+            entity_legal_name=parse_entity_name(summary),
+            lifecycle_stage=jira_stage.value,
+            jira_key=key,
+            last_synced_at=now_iso,
+            stage_entered_at=updated,
+            flags=([warning] if warning else []) + ["not_in_daca_summary_sheet"],
+        )
+        changes = reg.upsert_case(case, actor="sync:jira", ts=updated, evidence_link=evidence)
+        reg.append_event(key, updated, "sync:jira", "note", field="jira_summary",
+                         new_value=summary, evidence_link=evidence,
+                         idempotency_key=f"summary:{key}:{summary}")
+        return changes
+
+    # case already exists (from the sheet). Overlay pipeline stage only if in-flight.
+    if existing.lifecycle_stage in _TERMINAL:
+        if jira_stage.value not in _TERMINAL and jira_stage != LifecycleStage.CLOSED_UNRECONCILED:
+            reg._add_flag(existing.case_id,
+                          f"source_conflict: sheet/SF={existing.lifecycle_stage} but "
+                          f"Jira {key}={status_name!r} (open) — reconcile")
+            reg.append_event(existing.case_id, now_iso, "sync:jira", "flag",
+                             field="lifecycle_stage", old_value=existing.lifecycle_stage,
+                             new_value=f"jira:{status_name}", evidence_link=evidence,
+                             idempotency_key=f"conflict:{existing.case_id}:{status_name}")
+        return []
+
+    # in-flight case: Jira is authoritative for the pipeline stage
+    upd = Case(case_id=existing.case_id, entity_legal_name=existing.entity_legal_name,
+               lifecycle_stage=jira_stage.value, last_synced_at=now_iso)
+    return reg.upsert_case(upd, actor="sync:jira", ts=updated, evidence_link=evidence)
 
 
 def sync_all(reg: Register, tickets: list[dict], now_iso: str) -> dict:

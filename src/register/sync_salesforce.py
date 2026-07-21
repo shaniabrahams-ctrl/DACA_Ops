@@ -47,6 +47,15 @@ def normalize_name(name: str) -> str:
     return n
 
 
+def _bid(v) -> Optional[str]:
+    if v is None or v == "":
+        return None
+    try:
+        return str(int(float(v)))
+    except (ValueError, TypeError):
+        return str(v)
+
+
 def build_sf_index(sf_records: list[dict]) -> dict[str, list[dict]]:
     idx: dict[str, list[dict]] = {}
     for r in sf_records:
@@ -56,9 +65,22 @@ def build_sf_index(sf_records: list[dict]) -> dict[str, list[dict]]:
     return idx
 
 
-def _match(case: Case, sf_index: dict[str, list[dict]]) -> tuple[list[dict], Optional[str]]:
-    """Return (matched_sf_records, warning). Handles exact-normalized and
-    multi-entity (case name contains multiple SF names) matches."""
+def build_sf_bid_index(sf_records: list[dict]) -> dict[str, dict]:
+    idx: dict[str, dict] = {}
+    for r in sf_records:
+        b = _bid(r.get("Business_ID__c"))
+        if b:
+            idx[b] = r
+    return idx
+
+
+def _match(case: Case, sf_index: dict[str, list[dict]],
+           sf_bid_index: Optional[dict[str, dict]] = None) -> tuple[list[dict], Optional[str]]:
+    """Return (matched_sf_records, warning). Business ID is the strongest key
+    (both the sheet-seeded case and the SF record carry it); fall back to
+    normalized name, then multi-entity subset matching."""
+    if sf_bid_index and case.business_id and case.business_id in sf_bid_index:
+        return [sf_bid_index[case.business_id]], None
     cname = normalize_name(case.entity_legal_name)
     if not cname:
         return [], "empty entity name — cannot match to Salesforce"
@@ -82,18 +104,20 @@ def _match(case: Case, sf_index: dict[str, list[dict]]) -> tuple[list[dict], Opt
 def sync_salesforce(reg: Register, sf_records: list[dict], now_iso: str) -> dict:
     """Enrich + reconcile all register cases against real Salesforce DACA accounts."""
     sf_index = build_sf_index(sf_records)
+    sf_bid_index = build_sf_bid_index(sf_records)
     enriched = reconciled = flagged = 0
 
     for case in reg.all_cases():
-        matches, warning = _match(case, sf_index)
+        matches, warning = _match(case, sf_index, sf_bid_index)
         evidence = "salesforce:Account.DACA_Status__c"
 
         if not matches:
-            # only flag cases where we'd expect a match (closed/active-ish), to avoid
-            # noise on early-stage cases that legitimately have no SF DACA record yet
-            if case.lifecycle_stage in (LifecycleStage.CLOSED_UNRECONCILED.value,
-                                        LifecycleStage.ACTIVE.value,
-                                        LifecycleStage.TERMINATED.value):
+            # Only flag when Salesforce is genuinely the source we need: a Jira-"Done"
+            # case awaiting SF confirmation. For cases the DACA Summary sheet already
+            # establishes as active/terminated, "not in SF" just means SF's DACA fields
+            # lag the sheet — a low-value hygiene note, not a high-signal flag, so we
+            # skip it to avoid the noisy-alert problem that erodes trust in flags.
+            if case.lifecycle_stage == LifecycleStage.CLOSED_UNRECONCILED.value:
                 reg._add_flag(case.case_id, f"sf_unmatched: {warning}")
                 flagged += 1
             continue

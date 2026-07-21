@@ -43,6 +43,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.register.db import Register
 from src.register.sync_jira import sync_all
 from src.register.sync_salesforce import sync_salesforce
+from src.register.sync_gsheet import sync_gsheet
 
 
 def _load(path: str):
@@ -65,16 +66,27 @@ def _sf_records(payload) -> list[dict]:
 
 def main():
     ap = argparse.ArgumentParser(description="Seed the DACA register from live snapshots.")
+    ap.add_argument("--gsheet", help="Path to the 'Rho DACA Summary' sheet text (markdown/CSV)")
     ap.add_argument("--jira", help="Path to Jira DACA-Request search result JSON")
     ap.add_argument("--salesforce", help="Path to Salesforce DACA accounts SOQL result JSON")
     ap.add_argument("--db", default="daca_register.db", help="Output register path")
     args = ap.parse_args()
 
-    if not args.jira and not args.salesforce:
-        ap.error("provide at least --jira (and optionally --salesforce)")
+    if not (args.gsheet or args.jira or args.salesforce):
+        ap.error("provide at least one of --gsheet / --jira / --salesforce")
 
     now = datetime.now(timezone.utc).isoformat()
     reg = Register(args.db)
+
+    # Order matters: the DACA Summary sheet is the Business-ID-keyed backbone;
+    # Salesforce overlays authoritative status by BID; Jira overlays live pipeline
+    # stage by ticket key onto in-flight cases.
+    if args.gsheet:
+        with open(args.gsheet) as f:
+            content = f.read()
+        rep = sync_gsheet(reg, content, now)
+        print(f"DACA Summary sheet: {rep['rows']} rows → {rep['cases']} cases "
+              f"({rep['created']} created, {rep['flagged']} flagged)")
 
     if args.jira:
         tickets = _jira_nodes(_load(args.jira))

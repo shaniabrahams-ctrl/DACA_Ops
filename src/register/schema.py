@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS cases (
     control_state        TEXT NOT NULL DEFAULT 'unknown',
     hold_reason          TEXT,
     tier                 TEXT,
-    jira_key             TEXT UNIQUE,
+    jira_key             TEXT,   -- NOT unique: one ticket can cover several entity-cases
+                                 -- (a single CSHELP ticket often spans multiple debtor entities)
     legal_jira_key       TEXT,
     docusign_envelope_id TEXT,
     drive_folder         TEXT,
