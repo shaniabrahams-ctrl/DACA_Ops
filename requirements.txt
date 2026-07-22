@@ -15,3 +15,8 @@ httpx>=0.27                       # Typeform file download (loan-agreement intak
 google-api-python-client>=2.100   # Drive writer — file loan agreements into client folders
 google-auth>=2.30                 # service-account auth for the Drive writer
 # anthropic>=0.40   # only needed for the draft-generation features
+
+# Rhollout deploy: Postgres driver for the register (local stays on stdlib sqlite3;
+# the psycopg path activates only when DATABASE_URL is set). Added ahead of the
+# SQLite→Postgres port, which is done + validated in the deployed app repo.
+psycopg[binary]>=3.1
