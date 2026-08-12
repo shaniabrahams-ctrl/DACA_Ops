@@ -106,6 +106,59 @@ and later trigger events / termination.
   (missing rows, stale statuses, sheet-vs-Jira conflicts) and propose the corrections.
   Apply them only on approval.
 
+## Action playbooks (step-by-step, executable)
+
+These are the "just do it for me" actions. The user's instruction to run one **is**
+the approval to create the Jira ticket and write the tracker — but you still (a)
+echo back the resolved entity so a wrong BID is caught, and (b) refuse to create a
+duplicate.
+
+### Action 1 — "Open Jira ticket and update tracker for BID: <n>"
+Turns a Business ID into a filed, tracked DACA request with no manual steps.
+
+1. **Resolve the BID → entity.** Look up the Business ID (e.g. via the DACA Ops
+   register/board if deployed, else Salesforce `SELECT Name, Business_ID__c FROM
+   Account WHERE Business_ID__c = <n>`, else the DACA Summary sheet). Get the legal
+   entity name and any known lender/contact. If the BID resolves to nothing, stop and
+   say so — don't invent an entity.
+2. **Dedupe (mandatory).** Check whether this BID already has a DACA Request ticket
+   (register `jira_key`, or the sheet's Jira Ticket column, or JQL
+   `project = CSHELP AND issuetype = "DACA Request" AND summary ~ "<n>"`). If one
+   exists, **do not create another** — return the existing ticket link and stop.
+3. **Confirm in one line, then proceed.** e.g. "BID <n> = <Entity>. Creating the
+   CSHELP DACA Request ticket and updating the tracker." (Proceed immediately; this
+   isn't a new approval gate — the request was the go-ahead.)
+4. **Create the ticket.** Use `createJiraIssue`: `projectKey="CSHELP"`,
+   `issueTypeName="DACA Request"` (id `11920`), `summary="<n> - <ENTITY NAME> | DACA
+   Request"` (matches the real convention), `description` = the intake context you
+   have (lender, contact, how it arrived, requester). **Before creating, discover
+   required fields** with the Jira create-metadata for issue type `11920` and fill any
+   the project marks required (JSM projects sometimes require custom fields) via
+   `additional_fields`; if a required field's value is unknown, ask the user for just
+   that value rather than guessing. Apply the SOP's initial status (DACA Requests open
+   at **Fraud Initial Review**, and the DACA DRI tags Fraud) — set it via the
+   creation transition if available, else note it for the operator.
+5. **Update the tracker.**
+   - **Register (tracker of record):** upsert the case for this BID with the new
+     `jira_key` and stage `fraud_review`, and log a `ticket_created` event (evidence =
+     the ticket URL). If the DACA Ops app exposes this, call it; otherwise state the
+     row that should be recorded.
+   - **DACA Summary Google Sheet:** there is currently **no Sheets-write tool
+     available to a tagged assistant** (Drive MCP can read/create files, not append a
+     row to the existing sheet). So either the DACA Ops app's Sheets service-account
+     writer appends the row (target state), or — until that's wired — return the exact
+     row to paste: `# · <BID> · <Entity> · In progress · <lender if known> · <ticket
+     key>`. Say plainly that this one paste is the remaining manual step.
+6. **Return.** The new ticket link, what was updated (register ✓ / sheet row to
+   paste), the case's stage, and anything still needed (e.g. a required field value,
+   or the sheet paste). Keep it to a few lines.
+
+Gotchas: one BID = one entity-case, but one ticket can cover several entities (a
+multi-entity request) — if the user says "open one ticket for BIDs a, b, c", create a
+single ticket and link all three cases to it. Never create a duplicate ticket for a
+BID that already has one. Creating the ticket writes to a shared system — if the
+entity lookup is ambiguous or the BID looks wrong, ask before creating.
+
 ## Sources (real identifiers — reconcile across all of them)
 
 - **DACA Summary Google Sheet** — the backbone (lender contacts, account last-4,
@@ -115,9 +168,10 @@ and later trigger events / termination.
   DACA_Type__c, DACA_Agreement_Date__c FROM Account WHERE DACA_Status__c != null`.
   Status = Effective/Terminated; Type = Springing/Fully Blocked.
 - **Jira**: cloud `rho.atlassian.net` (`f87c0a5b-9b38-4613-b55d-cbddfc81601c`).
-  Pipeline tickets: `project = CSHELP AND issuetype = "DACA Request"`. Redline/legal
-  tickets are LEGALHELP-* (referenced from the sheet; that project may be
-  permission-restricted — link by key/URL if you can't read it).
+  Pipeline tickets: `project = CSHELP AND issuetype = "DACA Request"` (issue type id
+  `11920`, project id `10110`). Redline/legal tickets are LEGALHELP-* (referenced
+  from the sheet; that project may be permission-restricted — link by key/URL if you
+  can't read it).
 - **Typeform application responses** — client intake (lender + borrower details, loan
   agreement). Sheet id `1Oog92OTZ5w4Lss-CSVJ-jos8d4Or3K8qu6EQe0EuvtE`.
 - **Gmail** (`daca@rho.co` + operators) and **Zendesk** — client-facing threads,
