@@ -107,7 +107,29 @@ CREATE TABLE IF NOT EXISTS sync_runs (
     detail   TEXT                         -- JSON: per-source counts, or the error message
 );
 
+-- A signal the intake classifier couldn't confidently call net-new (no-infer rule):
+-- no case is opened for it, so it has no home in `cases`/`events`. This table exists
+-- solely so a re-run of intake doesn't re-post the same "confirm?" ping (idempotency)
+-- and so a human's Yes/No decision (from Slack or the app) has somewhere to land.
+CREATE TABLE IF NOT EXISTS pending_signals (
+    thread_id        TEXT PRIMARY KEY,        -- Gmail thread id (the source event's natural key)
+    detected_at      TEXT NOT NULL,
+    requester_email  TEXT,
+    requester_name   TEXT,
+    subject          TEXT,
+    snippet          TEXT,
+    candidate_entity TEXT,                    -- best-guess entity name — NEVER auto-applied to a case
+    zendesk_url      TEXT,
+    reasons          TEXT,                    -- JSON array of why it was flagged ambiguous
+    resolved         INTEGER NOT NULL DEFAULT 0,
+    resolution       TEXT,                    -- 'opened' | 'dismissed'
+    resolved_case_id TEXT,
+    resolved_by      TEXT,
+    resolved_at      TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_cases_stage ON cases(lifecycle_stage);
 CREATE INDEX IF NOT EXISTS idx_events_case ON events(case_id, ts);
 CREATE INDEX IF NOT EXISTS idx_parties_case ON parties(case_id);
+CREATE INDEX IF NOT EXISTS idx_pending_signals_resolved ON pending_signals(resolved);
 """

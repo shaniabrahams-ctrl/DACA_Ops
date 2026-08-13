@@ -53,6 +53,7 @@ TYPEFORM_FILE_RE = re.compile(r"https://api\.typeform\.com/responses/files/\S+")
 _H_BORROWER_NAME = ("legal business name", "legal entity name for the borrower")
 _H_BORROWER_EMAIL = ("business contact email", "email for the borrower's contact")
 _H_UPLOAD = ("upload your loan agreement", "upload a pdf file of the loan agreement")
+_H_LENDER_NAME = ("legal entity name for the lender", "lender legal name", "lender name")
 _H_TOKEN = ("token",)
 
 
@@ -79,7 +80,8 @@ def parse_responses(content: str) -> list[dict]:
     not fixed index, so both layouts work.
 
     Returns one dict per data row with: borrower_name, borrower_email,
-    upload_cell (raw), token. Rows with no token are ignored (spacer rows).
+    upload_cell (raw), lender_name (raw, "" if the form/response has none), token.
+    Rows with no token are ignored (spacer rows).
     """
     rows: list[dict] = []
     cols: Optional[dict] = None
@@ -100,6 +102,7 @@ def parse_responses(content: str) -> list[dict]:
                 "name": _find_col(cells, _H_BORROWER_NAME),
                 "email": _find_col(cells, _H_BORROWER_EMAIL),
                 "upload": _find_col(cells, _H_UPLOAD),
+                "lender": _find_col(cells, _H_LENDER_NAME),
                 "token": _find_col(cells, _H_TOKEN),
             }
             continue
@@ -117,6 +120,7 @@ def parse_responses(content: str) -> list[dict]:
             "borrower_name": _at("name"),
             "borrower_email": _at("email"),
             "upload_cell": _at("upload"),
+            "lender_name": _at("lender"),
             "token": token,
         })
     return rows

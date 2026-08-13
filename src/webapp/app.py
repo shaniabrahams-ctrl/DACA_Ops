@@ -47,7 +47,7 @@ from src.register.lifecycle import (
 from src.register.pipeline import STAGE_ORDER, OFF_PIPELINE, STALE_DAYS, _days_since
 from src.reports import webster_monthly as wm
 from src.register.sync_service import run_sync, build_sources_from_env, last_sync_runs
-from src.webapp.humanize import humanize_flag, SEV_ORDER
+from src.webapp.humanize import humanize_flag, resolution_options, SEV_ORDER
 from src.webapp.draft_reply import draft_reply, TYPES as DRAFT_TYPES
 from src.guide.playbook import guide_for, off_note_for
 
@@ -306,7 +306,8 @@ async def case_detail(request: Request, case_id: str, draft_type: str = ""):
         "days": _days_since(c.stage_entered_at, now),
         "next_stages": next_stages, "stepper": stepper, "off_pipeline": off_pipeline,
         "comms": comms, "zendesk_env": ZENDESK_ENV,
-        "flag_items": [{**humanize_flag(f), "raw": f} for f in c.flags],
+        "flag_items": [{**humanize_flag(f), "raw": f,
+                       "resolutions": resolution_options(f, STAGE_LABELS)} for f in c.flags],
         "progress": stage_progress(c.lifecycle_stage),
         "draft": draft, "draft_type": draft_type, "draft_types": DRAFT_TYPES,
         "sources": {
@@ -322,15 +323,48 @@ async def case_detail(request: Request, case_id: str, draft_type: str = ""):
     })
 
 
+def _ensure_drive_folder(r: Register, c: Case, ts: str) -> None:
+    """Auto-create the case's Drive client folder once a ticket is opened. Internal,
+    idempotent (skips if c.drive_folder is already set), never blocks ticket creation —
+    a missing GOOGLE_APPLICATION_CREDENTIALS degrades to a note, same pattern as Jira/
+    Zendesk/Slack elsewhere in this app."""
+    if c.drive_folder:
+        return
+    try:
+        from src.integrations.drive_writer import GoogleDriveWriter
+        dw = GoogleDriveWriter()
+        folder_id, folder_name, created = dw.find_or_create_client_folder(
+            business_id=c.business_id, entity_name=c.entity_legal_name,
+            matched=bool(c.business_id), create_missing=True)
+        upd = Case(case_id=c.case_id, entity_legal_name=c.entity_legal_name,
+                   lifecycle_stage=c.lifecycle_stage, drive_folder=folder_id)
+        r.upsert_case(upd, actor="auto:drive", ts=ts,
+                      evidence_link=f"https://drive.google.com/drive/folders/{folder_id}")
+        r.append_event(c.case_id, ts, "auto:drive", "drive_folder_created" if created else "note",
+                       new_value=f"Client folder: {folder_name}",
+                       evidence_link=f"https://drive.google.com/drive/folders/{folder_id}",
+                       idempotency_key=f"drivefolder:{c.case_id}")
+    except Exception as e:
+        r.append_event(c.case_id, ts, "auto:drive", "note",
+                       new_value=f"Drive folder auto-create skipped: {e}",
+                       idempotency_key=f"drivefoldererr:{c.case_id}:{ts}")
+
+
 @app.post("/case/{case_id}/create-ticket")
 def create_ticket(case_id: str):
-    """Create the DACA Jira ticket for this case (SOP Step 3), set fraud_review, and
-    write the key back onto the case. Human-gated: fired only by the operator's click."""
+    """Create the DACA Jira ticket for this case (SOP Step 3), set fraud_review, write
+    the key back onto the case, and auto-create its Drive client folder. Human-gated:
+    fired only by the operator's click. Idempotent — if a ticket already exists for
+    this case, this is a no-op rather than creating a second one (safe to click more
+    than once, and this is the same path Ping B's Slack confirm button will use)."""
     r = reg()
     c = r.get_case(case_id)
     if not c:
         return HTMLResponse("case not found", status_code=404)
     ts = now_iso()
+    if c.jira_key:
+        _ensure_drive_folder(r, c, ts)
+        return RedirectResponse(url=f"/case/{case_id}", status_code=303)
     try:
         from src.register.clients.jira_client import JiraClient
         jc = JiraClient()
@@ -350,6 +384,8 @@ def create_ticket(case_id: str):
         r.append_event(case_id, ts, OPERATOR, "ticket_created", field="jira_key",
                        new_value=res["key"], evidence_link=res["url"],
                        idempotency_key=f"ticket:{case_id}:{res['key']}")
+        c = r.get_case(case_id)
+        _ensure_drive_folder(r, c, ts)
     except Exception as e:
         r.append_event(case_id, ts, OPERATOR, "note", new_value=f"Create-ticket failed: {e}",
                        idempotency_key=f"ticketerr:{case_id}:{ts}")

@@ -29,8 +29,20 @@
     <div style="font-weight:600;">{{ h.title }}</div>
     {% if h.action %}<div class="muted small">{{ h.action }}</div>{% endif %}
     {% if h.detail %}<div class="muted small" style="opacity:.8;">{{ h.detail }}</div>{% endif %}
+    {% if h.resolutions %}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+      {% for r in h.resolutions %}
+      <form method="post" action="/case/{{ c.case_id }}/resolve" style="margin:0;">
+        <input type="hidden" name="flag" value="{{ h.raw }}">
+        <input type="hidden" name="new_stage" value="{{ r.new_stage }}">
+        <input type="hidden" name="note" value="{{ r.note }}">
+        <button class="btn{% if not loop.first %} secondary{% endif %}" type="submit">{{ r.label }}</button>
+      </form>
+      {% endfor %}
+    </div>
+    {% endif %}
     <details style="margin-top:8px;">
-      <summary class="small" style="cursor:pointer;color:var(--accent);font-weight:600;">Resolve…</summary>
+      <summary class="small" style="cursor:pointer;color:var(--accent);font-weight:600;">{% if h.resolutions %}Something else…{% else %}Resolve…{% endif %}</summary>
       <form method="post" action="/case/{{ c.case_id }}/resolve" style="margin-top:8px;max-width:520px;">
         <input type="hidden" name="flag" value="{{ h.raw }}">
         <label class="small">Correct the stage (optional)</label>

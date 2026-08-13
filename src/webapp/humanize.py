@@ -11,12 +11,52 @@ Each flag → {severity, title, action, detail}:
 """
 
 from __future__ import annotations
+import re
+
+from src.register.lifecycle import stage_for_jira_status
 
 SEV_ORDER = {"high": 0, "med": 1, "low": 2}
+
+# "source_conflict: sheet/SF=active but Jira CSHELP-6720='Docusign Sent' (open) — reconcile"
+_SOURCE_CONFLICT_RE = re.compile(
+    r"sheet/SF=(?P<sheet_stage>\S+) but Jira \S+='(?P<jira_status>[^']+)'")
 
 
 def _tail(flag: str) -> str:
     return flag.split(":", 1)[1].strip() if ":" in flag else ""
+
+
+def resolution_options(flag: str, stage_labels: dict) -> list[dict]:
+    """One-click resolutions for a flag, built from the exact values the flag
+    already names — no re-typing what the tool already told you. Empty list means
+    there's nothing to safely one-click-parse; the free-dropdown correction stays
+    available as the fallback for those."""
+    if flag.startswith("source_conflict"):
+        m = _SOURCE_CONFLICT_RE.search(flag)
+        if not m:
+            return []
+        sheet_stage = m.group("sheet_stage")
+        jira_status = m.group("jira_status")
+        mapped, _warning = stage_for_jira_status(jira_status)
+        options = [{
+            "label": f"Keep tracker/Salesforce: {stage_labels.get(sheet_stage, sheet_stage)}",
+            "new_stage": "",  # empty = leave lifecycle_stage as-is, just clear the flag
+            "note": f"Confirmed tracker/Salesforce value ({sheet_stage}) is correct; "
+                    f"Jira ({jira_status}) is stale or was reopened in error.",
+        }]
+        if mapped:
+            options.append({
+                "label": f"Use Jira: “{jira_status}” → {stage_labels.get(mapped.value, mapped.value)}",
+                "new_stage": mapped.value,
+                "note": f"Confirmed Jira ({jira_status}) is correct and current; "
+                        f"tracker/Salesforce ({sheet_stage}) is stale.",
+            })
+        return options
+    if flag.startswith("not_in_daca_summary_sheet"):
+        return [{"label": "Acknowledge — this is a DACA request", "new_stage": "",
+                 "note": "Confirmed this Jira ticket is a real DACA request; tracker will "
+                         "pick it up on the next export."}]
+    return []
 
 
 def humanize_flag(flag: str) -> dict:

@@ -246,3 +246,60 @@ class Register:
         d = dict(row)
         d["flags"] = json.loads(d.get("flags") or "[]")
         return Case(**d)
+
+    # ---- pending signals (ambiguous intake — no case exists yet) ----
+
+    def record_pending_signal(self, thread_id: str, ts: str, reasons: list[str], **kw) -> bool:
+        """Record an ambiguous inbound signal for a human Yes/No decision. Returns True
+        if newly recorded, False if this thread_id was already seen (idempotent — a
+        re-run of intake must not re-post the same confirm-ping)."""
+        if self.get_pending_signal(thread_id):
+            return False
+        cols = ["requester_email", "requester_name", "subject", "snippet",
+                "candidate_entity", "zendesk_url"]
+        vals = {c: kw.get(c) for c in cols}
+        self.conn.execute(
+            "INSERT INTO pending_signals (thread_id, detected_at, requester_email, "
+            "requester_name, subject, snippet, candidate_entity, zendesk_url, reasons) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (thread_id, ts, vals["requester_email"], vals["requester_name"], vals["subject"],
+             vals["snippet"], vals["candidate_entity"], vals["zendesk_url"], json.dumps(reasons)),
+        )
+        self.conn.commit()
+        return True
+
+    def get_pending_signal(self, thread_id: str) -> Optional[dict]:
+        cur = self.conn.execute("SELECT * FROM pending_signals WHERE thread_id=?", (thread_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["reasons"] = json.loads(d.get("reasons") or "[]")
+        return d
+
+    def list_pending_signals(self, unresolved_only: bool = True) -> list[dict]:
+        sql = "SELECT * FROM pending_signals"
+        if unresolved_only:
+            sql += " WHERE resolved=0"
+        sql += " ORDER BY detected_at DESC"
+        cur = self.conn.execute(sql)
+        out = []
+        for r in cur.fetchall():
+            d = dict(r)
+            d["reasons"] = json.loads(d.get("reasons") or "[]")
+            out.append(d)
+        return out
+
+    def resolve_pending_signal(self, thread_id: str, resolution: str, actor: str, ts: str,
+                               case_id: Optional[str] = None) -> bool:
+        """Apply the human's Yes ('opened')/No ('dismissed') decision. Returns False if
+        already resolved (idempotent — re-clicking confirm/dismiss is a no-op)."""
+        sig = self.get_pending_signal(thread_id)
+        if not sig or sig["resolved"]:
+            return False
+        self.conn.execute(
+            "UPDATE pending_signals SET resolved=1, resolution=?, resolved_case_id=?, "
+            "resolved_by=?, resolved_at=? WHERE thread_id=?",
+            (resolution, case_id, actor, ts, thread_id))
+        self.conn.commit()
+        return True

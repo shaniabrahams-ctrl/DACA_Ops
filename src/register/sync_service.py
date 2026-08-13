@@ -49,9 +49,9 @@ def build_sources_from_env() -> Sources:
 
 
 def _notify_new(reg: Register, case_ids: list[str], source: str) -> int:
-    """Post a #daca-ops alert for each newly-created case. Automatic (internal ops
-    notification, not client-facing) — no per-message gate; only fires on the freshly
-    created set so it never re-spams. No-op when Slack isn't configured."""
+    """Post a #daca-ops Ping A (clean) for each newly-created case. Automatic (internal
+    ops notification, not client-facing) — no per-message gate; only fires on the
+    freshly created set so it never re-spams. No-op when Slack isn't configured."""
     posted = 0
     for cid in case_ids:
         c = reg.get_case(cid)
@@ -59,10 +59,26 @@ def _notify_new(reg: Register, case_ids: list[str], source: str) -> int:
             continue
         contact = next((p.get("email") for p in reg.parties_for(cid)
                         if p.get("role") == "borrower_contact" and p.get("email")), "")
-        text = slack_notify.format_new_request(
-            entity=c.entity_legal_name, requester=contact, subject="",
-            received=c.initial_inquiry_date or "", case_id=cid, source=source)
-        res = slack_notify.post(text)
+        payload = slack_notify.format_ping_a_clean(
+            case_id=cid, entity=c.entity_legal_name, requester_email=contact, subject="",
+            origin=source, received=c.initial_inquiry_date or "")
+        res = slack_notify.post_blocks(payload)
+        if res.get("ok"):
+            posted += 1
+    return posted
+
+
+def _notify_ambiguous(signals: list[dict]) -> int:
+    """Post a #daca-ops Ping A (ambiguous) confirm-ping for each newly-flagged signal.
+    No case exists for these — see intake_email.classify. No-op when Slack isn't
+    configured."""
+    posted = 0
+    for s in signals:
+        payload = slack_notify.format_ping_a_ambiguous(
+            thread_id=s.get("thread_id", ""), candidate_entity=s["candidate_entity"],
+            requester_email=s.get("requester_email", ""), subject=s.get("subject", ""),
+            reasons=s["reasons"])
+        res = slack_notify.post_blocks(payload)
         if res.get("ok"):
             posted += 1
     return posted
